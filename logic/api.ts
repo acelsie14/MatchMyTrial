@@ -1,5 +1,3 @@
-// api.ts
-
 interface Study {
   protocolSection?: {
     identificationModule?: {
@@ -33,81 +31,129 @@ interface Study {
   };
 }
 
+export interface PatientProfile {
+  condition: string;
+  age: number;
+  gender: 'male' | 'female';
+  isPregnant?: boolean;
+  hasRecentMajorSurgery?: boolean;
+  isInCardiogenicShock?: boolean;
+  latitude?: number;
+  longitude?: number;
+  maxDistance?: number;
+  distanceUnit?: 'mi' | 'km';
+  locationName?: string;
+}
+
 interface ApiResponse {
   studies?: Study[];
   nextPageToken?: string;
 }
 
-export interface PatientProfile {
-  condition: string;
-  age: number;
-  gender: 'male' | 'female' | 'other';
-  isPregnant?: boolean;
-  hasRecentMajorSurgery?: boolean;
-  isInCardiogenicShock?: boolean;
-  hemoglobin?: number;
-  // New location fields
+// Add FetchOptions interface
+interface FetchOptions {
+  locationName?: string;
   latitude?: number;
   longitude?: number;
-  maxDistance?: number; // in miles or km
+  maxDistance?: number;
   distanceUnit?: 'mi' | 'km';
-  locationName?: string; // city, state, or country name
+  sortBy?: 'relevance' | 'date'; // NEW: control sorting
+  maxPages?: number; // NEW: limit number of pages
+  pageSize?: number; // NEW: control items per page
 }
 
-async function fetchStudiesByCondition(
-  condition: string = 'diabetes',
-  maxPages: number = 3,
-  locationName?: string,
-  latitude?: number,
-  longitude?: number,
-  maxDistance?: number,
-  distanceUnit: 'mi' | 'km' = 'mi',
+async function fetchStudies(
+  condition: string,
+  options: FetchOptions = {},
 ): Promise<Study[]> {
+  // Destructure with defaults
+  const {
+    locationName,
+    latitude,
+    longitude,
+    maxDistance,
+    distanceUnit = 'km',
+    sortBy = 'date', // Default to date (newest first)
+    maxPages = 20, // Default: fetch all pages (no limit)
+    pageSize = 100, // Default: 100 per page
+  } = options;
+
   let allStudies: Study[] = [];
   let nextPageToken: string | null = null;
   let pageCount = 0;
 
-  do {
-    // Start building URL
-    let url = `https://clinicaltrials.gov/api/v2/studies?query.cond=${encodeURIComponent(condition)}&pageSize=20&format=json`;
+  // Determine sort parameter based on sortBy
+  let sortParam = '';
+  if (sortBy === 'relevance') {
+    sortParam = '&sort=@relevance';
+  } else if (sortBy === 'date') {
+    sortParam = '&sort=LastUpdatePostDate:desc';
+  }
 
-    // Add location name filter if provided
-    if (locationName) {
-      url += `&query.locn=${encodeURIComponent(locationName)}`;
-    }
+  try {
+    // Keep fetching while there's a next page token AND we haven't hit maxPages
+    do {
+      // Build URL with encoded parameters
+      let url = `https://clinicaltrials.gov/api/v2/studies?${sortParam}&pageSize=${pageSize}&format=json`;
 
-    // Add geo distance filter if coordinates provided
-    if (latitude && longitude && maxDistance) {
-      url += `&filter.geo=distance(${latitude},${longitude},${maxDistance}${distanceUnit})`;
-    }
+      if (condition) {
+        url += `&query.cond=${encodeURIComponent(condition)}`;
+      }
 
-    if (nextPageToken) {
-      url += `&pageToken=${nextPageToken}`;
-    }
+      // Add location name filter if provided
+      if (locationName) {
+        url += `&query.locn=${encodeURIComponent(locationName)}`;
+      }
 
-    console.log(`Fetching page ${pageCount + 1}...`);
-    const response = await fetch(url);
-    const data: ApiResponse = await response.json();
+      // Add geo distance filter if coordinates provided
+      if (latitude && longitude && maxDistance) {
+        url += `&filter.geo=distance(${latitude},${longitude},${maxDistance}${distanceUnit})`;
+      }
 
-    // Add studies from this page
-    if (data.studies && data.studies.length > 0) {
-      allStudies.push(...data.studies);
-    }
+      // Add page token if exists (not on first page)
+      if (nextPageToken) {
+        url += `&pageToken=${nextPageToken}`;
+      }
 
-    // Get token for next page
-    nextPageToken = data.nextPageToken || null;
-    pageCount++;
+      console.log(`Fetching page ${pageCount + 1} (sortBy: ${sortBy})...`);
+      const response = await fetch(url);
 
-    // STOP after maxPages
-    if (pageCount >= maxPages) {
-      console.log(
-        `Stopping after ${maxPages} pages (${allStudies.length} studies)`,
-      );
-      break;
-    }
-  } while (nextPageToken);
+      if (!response.ok) {
+        console.error(`API Error: ${response.status} ${response.statusText}`);
+        break;
+      }
 
-  return allStudies;
+      const data: ApiResponse = await response.json();
+
+      if (data.studies && data.studies.length > 0) {
+        allStudies.push(...data.studies);
+        console.log(
+          `Page ${pageCount + 1}: Found ${data.studies.length} studies`,
+        );
+      } else {
+        console.log(`Page ${pageCount + 1}: No studies found`);
+      }
+
+      nextPageToken = data.nextPageToken || null;
+      pageCount++;
+
+      // STOP if we've reached maxPages
+      if (pageCount >= maxPages) {
+        console.log(
+          `Stopping after ${maxPages} page(s) (${allStudies.length} studies)`,
+        );
+        break;
+      }
+    } while (nextPageToken);
+
+    console.log(
+      `Fetch complete: ${allStudies.length} total studies from ${pageCount} pages`,
+    );
+    return allStudies;
+  } catch (error) {
+    console.error('Error fetching studies:', error);
+    return [];
+  }
 }
 
-export { fetchStudiesByCondition, type Study };
+export { fetchStudies, type Study };

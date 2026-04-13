@@ -1,4 +1,3 @@
-// TestScreen.tsx
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -8,7 +7,7 @@ import {
   View,
 } from 'react-native';
 import { PatientProfile, Study } from '../logic/api';
-import { matchPatientToTrials } from '../logic/filteringLogic';
+import { getTopAndAllMatches } from '../logic/filteringLogic';
 
 export default function TestScreen() {
   const [matches, setMatches] = useState<Study[]>([]);
@@ -22,17 +21,13 @@ export default function TestScreen() {
     try {
       // Test patient WITH location filters
       const patient: PatientProfile = {
-        condition: 'Cancer',
-        age: 30,
+        condition: 'cancer',
+        age: 40,
         gender: 'female',
-        isPregnant: false,
-        hasRecentMajorSurgery: false,
-        isInCardiogenicShock: false,
-        hemoglobin: 0,
         // Location filters - choose ONE of these methods:
 
         // Method 1: Search by location name (city, state, or country)
-        locationName: 'Nigeria', // Finds trials in New York
+        locationName: 'nigeria', // Finds trials in New York
 
         // Method 2: Search by coordinates (uncomment to use)
         // latitude: 40.7128,
@@ -41,9 +36,11 @@ export default function TestScreen() {
         // distanceUnit: 'mi', // 'mi' for miles, 'km' for kilometers
       };
 
-      const results = await matchPatientToTrials(patient);
-      setMatches(results);
-      setTestResult(`✅ Found ${results.length} matching trials`);
+      const results = await getTopAndAllMatches(patient);
+      setMatches(results.filteredTrials);
+      setTestResult(
+        `✅ Found ${results.filteredTrials.length} matching trials`,
+      );
     } catch (error) {
       setTestResult(`❌ Error: ${error}`);
     } finally {
@@ -58,20 +55,20 @@ export default function TestScreen() {
 
     try {
       const patient: PatientProfile = {
-        condition: 'diabetes',
-        age: 45,
-        gender: 'male',
+        condition: 'cancer',
+        age: 40,
+        gender: 'female',
         isPregnant: false,
         hasRecentMajorSurgery: false,
         isInCardiogenicShock: false,
-        hemoglobin: 13.5,
+
         // No location filters
       };
 
-      const results = await matchPatientToTrials(patient);
-      setMatches(results);
+      const results = await getTopAndAllMatches(patient);
+      setMatches(results.filteredTrials);
       setTestResult(
-        `✅ Found ${results.length} matching trials (no location filter)`,
+        `✅ Found ${results.filteredTrials.length} matching trials (no location filter)`,
       );
     } catch (error) {
       setTestResult(`❌ Error: ${error}`);
@@ -106,7 +103,7 @@ export default function TestScreen() {
       {matches.length > 0 ? (
         <View style={{ marginTop: 20 }}>
           <Text style={{ fontWeight: 'bold' }}>Sample Matches:</Text>
-          {matches.slice(0, 5).map((trial, index) => (
+          {matches.slice(0, matches.length).map((trial, index) => (
             <View
               key={index}
               style={{ marginTop: 10, padding: 10, borderWidth: 1 }}
