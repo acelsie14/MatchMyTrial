@@ -1,9 +1,11 @@
+import { logout } from '@/services/authServices';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Button,
   ScrollView,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { PatientProfile, Study } from '../../logic/api';
@@ -21,13 +23,13 @@ export default function TestScreen() {
     try {
       // Test patient WITH location filters
       const patient: PatientProfile = {
-        condition: 'cancer',
-        age: 40,
+        condition: 'fibroid',
+        age: 25,
         gender: 'female',
         // Location filters - choose ONE of these methods:
 
         // Method 1: Search by location name (city, state, or country)
-        locationName: 'nigeria', // Finds trials in New York
+        locationName: 'chicago', // Finds trials in New York
 
         // Method 2: Search by coordinates (uncomment to use)
         // latitude: 40.7128,
@@ -91,7 +93,18 @@ export default function TestScreen() {
           onPress={runTestWithoutLocation}
         />
       </View>
-
+      <TouchableOpacity
+        onPress={logout}
+        style={{
+          marginTop: 20,
+          padding: 15,
+          backgroundColor: '#EF4444',
+          borderRadius: 10,
+          alignItems: 'center',
+        }}
+      >
+        <Text style={{ color: '#fff', fontWeight: 'bold' }}>Logout</Text>
+      </TouchableOpacity>
       {loading && <ActivityIndicator size="large" style={{ marginTop: 20 }} />}
 
       {testResult ? (

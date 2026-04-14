@@ -1,4 +1,7 @@
+import { Colors } from '@/constants/colors';
+import { saveUser } from '@/services/authStorage';
 import { AntDesign } from '@expo/vector-icons';
+import auth from '@react-native-firebase/auth';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useState } from 'react';
@@ -52,18 +55,50 @@ const Signup = () => {
     return true;
   };
 
-  const handleSignUp = () => {
+  const handleSignUp = async () => {
     if (!validateForm()) {
       return;
     }
     setLoading(true);
     setError('');
 
-    // Simulate API call (replace with Firebase later)
-    setTimeout(() => {
+    try {
+      // firebase signup logic
+      await auth().createUserWithEmailAndPassword(email, password);
+      const user = auth().currentUser;
+      if (user) {
+        await saveUser({
+          uid: user.uid,
+          email: user.email || '',
+          username: user.displayName || '',
+        });
+      }
+      router.replace('/main/home');
+    } catch (error: any) {
+      const errorCode = error.code;
+
+      switch (errorCode) {
+        case 'auth/invalid-email':
+          setError('Please enter a valid email address');
+          break;
+        case 'auth/email-already-in-use':
+          setError(
+            'An account already exists with this email. Please login instead.',
+          );
+          break;
+        case 'auth/weak-password':
+          setError('Password is too weak. Please use at least 6 characters.');
+          break;
+        case 'auth/network-request-failed':
+          setError('No internet connection. Please check your network.');
+          break;
+        default:
+          setError('Failed to create account. Please try again.');
+          break;
+      }
+    } finally {
       setLoading(false);
-      router.push('/main/home');
-    }, 1500);
+    }
   };
 
   return (
@@ -203,7 +238,7 @@ const Signup = () => {
           {/* Footer Section */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>Already have an account?</Text>
-            <TouchableOpacity onPress={() => router.push('/auth/login')}>
+            <TouchableOpacity onPress={() => router.replace('/auth/login')}>
               <Text style={styles.linkText}>Sign In</Text>
             </TouchableOpacity>
           </View>
@@ -258,7 +293,7 @@ const styles = StyleSheet.create({
     borderLeftColor: '#EF4444',
   },
   errorText: {
-    color: '#DC2626',
+    color: Colors.error,
     fontSize: 14,
     textAlign: 'center',
   },
@@ -310,14 +345,14 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   button: {
-    backgroundColor: '#6BBF73',
+    backgroundColor: Colors.primary,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     marginTop: 16,
   },
   buttonDisabled: {
-    backgroundColor: '#a8e0b3',
+    backgroundColor: Colors.primaryLight,
     opacity: 0.8,
   },
   buttonText: {
@@ -337,7 +372,7 @@ const styles = StyleSheet.create({
   },
   linkText: {
     fontSize: 14,
-    color: '#6BBF73',
+    color: Colors.primary,
     fontWeight: '600',
   },
 });

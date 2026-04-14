@@ -1,3 +1,6 @@
+import { Colors } from '@/constants/colors';
+import { saveUser } from '@/services/authStorage';
+import auth from '@react-native-firebase/auth';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
@@ -11,7 +14,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -29,11 +31,45 @@ const Login = () => {
     setLoading(true);
     setError('');
 
-    // Simulate API call (replace with Firebase)
-    setTimeout(() => {
+    // firbase login logic
+    try {
+      await auth().signInWithEmailAndPassword(email, password);
+      const user = auth().currentUser;
+      if (user) {
+        await saveUser({
+          uid: user.uid,
+          email: user.email || '',
+          username: user.displayName || '',
+        });
+      }
+      router.replace('/main/home');
+    } catch (error: any) {
+      const errorCode = error.code;
+
+      // Map error code to user-friendly message
+      switch (errorCode) {
+        case 'auth/invalid-email':
+          setError('Please enter a valid email address');
+          break;
+        case 'auth/user-not-found':
+          setError('No account found with this email. Please sign up first.');
+          break;
+        case 'auth/wrong-password':
+          setError('Incorrect password. Please try again.');
+          break;
+        case 'auth/too-many-requests':
+          setError('Too many failed attempts. Please try again later.');
+          break;
+        case 'auth/network-request-failed':
+          setError('No internet connection. Please check your network.');
+          break;
+        default:
+          setError('Failed to sign in. Please try again.');
+          break;
+      }
+    } finally {
       setLoading(false);
-      router.push('/main/home');
-    }, 1500);
+    }
   };
 
   return (
@@ -116,7 +152,7 @@ const Login = () => {
         {/* Footer Section */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don&apos;t have an account?</Text>
-          <TouchableOpacity onPress={() => router.push('/auth/signup')}>
+          <TouchableOpacity onPress={() => router.replace('/auth/signup')}>
             <Text style={styles.linkText}>Sign Up</Text>
           </TouchableOpacity>
         </View>
@@ -167,7 +203,7 @@ const styles = StyleSheet.create({
     borderLeftColor: '#EF4444',
   },
   errorText: {
-    color: '#DC2626',
+    color: Colors.error,
     fontSize: 14,
     textAlign: 'center',
   },
@@ -193,14 +229,14 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
   },
   button: {
-    backgroundColor: '#6BBF73',
+    backgroundColor: Colors.primary,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     marginTop: 8,
   },
   buttonDisabled: {
-    backgroundColor: '#a8e0b3',
+    backgroundColor: Colors.primaryLight,
     opacity: 0.8,
   },
   buttonText: {
@@ -220,7 +256,7 @@ const styles = StyleSheet.create({
   },
   linkText: {
     fontSize: 14,
-    color: '#6BBF73',
+    color: Colors.primary,
     fontWeight: '600',
   },
 });
