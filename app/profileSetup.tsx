@@ -1,5 +1,7 @@
 import DropDown from '@/components/DropDown';
 import { Colors } from '@/constants/colors';
+import { saveUserProfile } from '@/services/firestoreService';
+import auth from '@react-native-firebase/auth';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -51,15 +53,21 @@ const ProfileSetup = () => {
     setError('');
 
     try {
-      // TODO: Save to Firestore
-      // await saveUserProfile({
-      //   age: parseInt(age, 10),
-      //   gender: gender.toLowerCase(),
-      //   condition,
-      // });
+      const user = auth().currentUser;
+      if (!user) {
+        setError('User not found. Please log in again.');
+        setLoading(false);
+        return;
+      }
 
-      // Navigate to main tabs
-      router.replace('/main/home');
+      await saveUserProfile(user.uid, {
+        age: parseInt(age, 10),
+        gender: gender.toLowerCase(),
+        condition: condition,
+      });
+
+      // ✅ Navigate to index to re-check profile (will now go to home)
+      router.replace('/');
     } catch (err) {
       setError('Failed to save profile. Please try again.');
     } finally {
@@ -74,25 +82,23 @@ const ProfileSetup = () => {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
-          {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.emoji}>🩺</Text>
-            <Text style={styles.title}>Complete Your Profile</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={styles.title}>Complete Your Profile</Text>
+              <Text style={styles.emoji}>🩺</Text>
+            </View>
             <Text style={styles.subtitle}>
               Tell us about yourself to find the best clinical trial matches
             </Text>
           </View>
 
-          {/* Error Message */}
           {error ? (
             <View style={styles.errorContainer}>
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
 
-          {/* Form */}
           <View style={styles.form}>
-            {/* Age Field */}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>
                 Age <Text style={styles.required}>*</Text>
@@ -110,7 +116,6 @@ const ProfileSetup = () => {
               />
             </View>
 
-            {/* Gender Field */}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>
                 Gender <Text style={styles.required}>*</Text>
@@ -119,7 +124,6 @@ const ProfileSetup = () => {
                 data={[
                   { value: 'Male', label: 'M' },
                   { value: 'Female', label: 'F' },
-                  { value: 'Other', label: 'O' },
                 ]}
                 placeholder="Select Gender"
                 onChange={(data) => {
@@ -129,7 +133,6 @@ const ProfileSetup = () => {
               />
             </View>
 
-            {/* Condition Field */}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>
                 Medical Condition <Text style={styles.required}>*</Text>
@@ -146,7 +149,6 @@ const ProfileSetup = () => {
               />
             </View>
 
-            {/* Save Button */}
             <TouchableOpacity
               style={[styles.button, loading && styles.buttonDisabled]}
               onPress={handleSave}

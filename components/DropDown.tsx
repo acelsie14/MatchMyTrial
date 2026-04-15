@@ -47,7 +47,7 @@ const DropDown = ({ data, onChange, placeholder }: DropDownProps) => {
         const heightOfComponent = layout.height;
 
         const finalValue =
-          topOffset + heightOfComponent + (Platform.OS === 'android' ? 10 : 0);
+          topOffset + heightOfComponent + (Platform.OS === 'android' ? 420 : 3);
 
         setTop(finalValue);
       }}
@@ -97,6 +97,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 15,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ccc',
   },
   text: {
     fontSize: 15,

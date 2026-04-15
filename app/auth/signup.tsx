@@ -1,15 +1,13 @@
 import { Colors } from '@/constants/colors';
 import { saveUser } from '@/services/authStorage';
-import { AntDesign } from '@expo/vector-icons';
 import auth from '@react-native-firebase/auth';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -21,12 +19,11 @@ const Signup = () => {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
   const router = useRouter();
 
   const validateForm = () => {
@@ -38,7 +35,6 @@ const Signup = () => {
       setError('Username must be at least 3 characters long');
       return false;
     }
-    // Email validation
     const emailRegex = /^[^\s@]+@([^\s@]+\.)+[^\s@]+$/;
     if (!emailRegex.test(email)) {
       setError('Please enter a valid email address');
@@ -59,21 +55,25 @@ const Signup = () => {
     if (!validateForm()) {
       return;
     }
+
     setLoading(true);
     setError('');
 
     try {
-      // firebase signup logic
-      await auth().createUserWithEmailAndPassword(email, password);
-      const user = auth().currentUser;
-      if (user) {
-        await saveUser({
-          uid: user.uid,
-          email: user.email || '',
-          username: user.displayName || '',
-        });
-      }
-      router.replace('/main/home');
+      const userCredential = await auth().createUserWithEmailAndPassword(
+        email,
+        password,
+      );
+      const user = userCredential.user;
+
+      await saveUser({
+        uid: user.uid,
+        email: user.email || '',
+        username: username,
+      });
+
+      // ✅ Navigate to index to check profile
+      router.replace('/');
     } catch (error: any) {
       const errorCode = error.code;
 
@@ -107,143 +107,125 @@ const Signup = () => {
       style={styles.container}
     >
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.content}>
-          {/* Header Section */}
-          <View style={styles.header}>
-            <View
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
-            >
-              <Text style={styles.title}>Create Account</Text>
-              <Text style={styles.emoji}>🩺</Text>
-            </View>
-            <Text style={styles.subtitle}>
-              Join MatchMyTrial to find your perfect clinical trial
-            </Text>
+
+      <View style={styles.content}>
+        <View style={styles.header}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Text style={styles.title}>Create Account</Text>
+            <Text style={styles.emoji}>🩺</Text>
           </View>
-
-          {/* Error Message */}
-          {error ? (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : null}
-
-          {/* Form Section */}
-          <View style={styles.form}>
-            {/* Username Field */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Username</Text>
-              <TextInput
-                placeholder="johndoe"
-                value={username}
-                onChangeText={(text) => {
-                  setError('');
-                  setUsername(text);
-                }}
-                style={styles.input}
-                autoCapitalize="none"
-                editable={!loading}
-              />
-            </View>
-
-            {/* Email Field */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                placeholder="you@example.com"
-                value={email}
-                onChangeText={(text) => {
-                  setError('');
-                  setEmail(text);
-                }}
-                style={styles.input}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                editable={!loading}
-              />
-            </View>
-
-            {/* Password Field */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.passwordContainer}>
-                <TextInput
-                  placeholder="Create a password"
-                  value={password}
-                  onChangeText={(text) => {
-                    setError('');
-                    setPassword(text);
-                  }}
-                  secureTextEntry={!showPassword}
-                  style={styles.passwordInput}
-                  editable={!loading}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowPassword(!showPassword)}
-                  style={styles.eyeButton}
-                >
-                  <AntDesign
-                    name={showPassword ? 'eye' : 'eye-invisible'}
-                    size={20}
-                    color="#888"
-                  />
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.hintText}>Minimum 6 characters</Text>
-            </View>
-
-            {/* Confirm Password Field */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Confirm Password</Text>
-              <View style={styles.passwordContainer}>
-                <TextInput
-                  placeholder="Confirm your password"
-                  value={confirmPassword}
-                  onChangeText={(text) => {
-                    setError('');
-                    setConfirmPassword(text);
-                  }}
-                  secureTextEntry={!showConfirmPassword}
-                  style={styles.passwordInput}
-                  editable={!loading}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                  style={styles.eyeButton}
-                >
-                  <AntDesign
-                    name={showConfirmPassword ? 'eye' : 'eye-invisible'}
-                    size={20}
-                    color="#888"
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Sign Up Button */}
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleSignUp}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Create Account</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {/* Footer Section */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account?</Text>
-            <TouchableOpacity onPress={() => router.replace('/auth/login')}>
-              <Text style={styles.linkText}>Sign In</Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.subtitle}>
+            Join MatchMyTrial to find your perfect clinical trial match
+          </Text>
         </View>
-      </ScrollView>
+
+        {error ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.form}>
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Username</Text>
+            <TextInput
+              placeholder="johndoe"
+              value={username}
+              onChangeText={(text) => {
+                setError('');
+                setUsername(text);
+              }}
+              style={styles.input}
+              autoCapitalize="none"
+              editable={!loading}
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              placeholder="you@example.com"
+              value={email}
+              onChangeText={(text) => {
+                setError('');
+                setEmail(text);
+              }}
+              style={styles.input}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              editable={!loading}
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.passwordContainer}>
+              <TextInput
+                placeholder="Create a password"
+                value={password}
+                onChangeText={(text) => {
+                  setError('');
+                  setPassword(text);
+                }}
+                secureTextEntry={!showPassword}
+                style={styles.passwordInput}
+                editable={!loading}
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeButton}
+              >
+                <Text style={styles.eyeText}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.hintText}>Minimum 6 characters</Text>
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Confirm Password</Text>
+            <View style={styles.passwordContainer}>
+              <TextInput
+                placeholder="Confirm your password"
+                value={confirmPassword}
+                onChangeText={(text) => {
+                  setError('');
+                  setConfirmPassword(text);
+                }}
+                secureTextEntry={!showConfirmPassword}
+                style={styles.passwordInput}
+                editable={!loading}
+              />
+              <TouchableOpacity
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                style={styles.eyeButton}
+              >
+                <Text style={styles.eyeText}>
+                  {showConfirmPassword ? '👁️' : '👁️‍🗨️'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleSignUp}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Create Account</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Already have an account?</Text>
+          <TouchableOpacity onPress={() => router.replace('/auth/login')}>
+            <Text style={styles.linkText}>Sign In</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     </KeyboardAvoidingView>
   );
 };
@@ -254,9 +236,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-  },
-  scrollContent: {
-    flexGrow: 1,
   },
   content: {
     flex: 1,
@@ -365,6 +344,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
+    marginTop: 16,
   },
   footerText: {
     fontSize: 14,

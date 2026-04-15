@@ -24,23 +24,22 @@ export default function RootLayout() {
     console.log('User exists:', !!user);
 
     const inAuthGroup = segments[0] === 'auth';
-    const inMainGroup = segments[0] === 'main';
 
-    if (!user && !inAuthGroup) {
-      // Not logged in and not in auth group - go to login
+    // Only handle auth redirects here
+    // Profile and main redirects are handled by index.tsx
+    if (!user && !inAuthGroup && segments[0] !== 'index') {
       console.log('Redirecting to login');
       router.replace('/auth/login');
-    } else if (user && !inMainGroup && segments[0] !== 'index') {
-      // Logged in but not in main group - go to home
-      console.log('Redirecting to home');
-      router.replace('/main/home');
     }
+    // If user is logged in, let index.tsx decide (profile-setup vs main)
+    // Don't auto-redirect here
   }, [initializing, user, segments]);
 
   return (
     <Stack>
       <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen name="main" options={{ headerShown: false }} />
+      <Stack.Screen name="profileSetup" options={{ headerShown: false }} />
       <Stack.Screen name="index" options={{ headerShown: false }} />
     </Stack>
   );

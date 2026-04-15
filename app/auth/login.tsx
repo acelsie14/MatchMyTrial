@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,7 +32,6 @@ const Login = () => {
     setLoading(true);
     setError('');
 
-    // firbase login logic
     try {
       await auth().signInWithEmailAndPassword(email, password);
       const user = auth().currentUser;
@@ -42,11 +42,11 @@ const Login = () => {
           username: user.displayName || '',
         });
       }
-      router.replace('/main/home');
+      // ✅ Navigate to index to check profile
+      router.replace('/');
     } catch (error: any) {
       const errorCode = error.code;
 
-      // Map error code to user-friendly message
       switch (errorCode) {
         case 'auth/invalid-email':
           setError('Please enter a valid email address');
@@ -80,7 +80,6 @@ const Login = () => {
       <StatusBar style="dark" />
 
       <View style={styles.content}>
-        {/* Header Section */}
         <View style={styles.header}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <Text style={styles.title}>Welcome Back</Text>
@@ -91,14 +90,12 @@ const Login = () => {
           </Text>
         </View>
 
-        {/* Error Message */}
         {error ? (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : null}
 
-        {/* Form Section */}
         <View style={styles.form}>
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Email</Text>
@@ -149,7 +146,6 @@ const Login = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Footer Section */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don&apos;t have an account?</Text>
           <TouchableOpacity onPress={() => router.replace('/auth/signup')}>
