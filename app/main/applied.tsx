@@ -4,7 +4,7 @@ import { Text, View } from 'react-native';
 const applied = () => {
   return (
     <View>
-      <Text>applied</Text>
+      <Text>appliedddd</Text>
     </View>
   );
 };
