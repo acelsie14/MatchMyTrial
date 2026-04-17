@@ -1,5 +1,3 @@
-// app/main/home.tsx
-import { logout } from '@/services/authServices';
 import { getUserProfile } from '@/services/firestoreService';
 import auth from '@react-native-firebase/auth';
 import { router } from 'expo-router';
@@ -201,13 +199,9 @@ export default function HomeScreen() {
           allTrials={allTrials}
           isLoading={loading}
           onTrialPress={handleTrialPress}
+          userCondition={userProfile?.condition}
         />
       )}
-
-      {/* Logout Button */}
-      <TouchableOpacity onPress={logout} style={styles.logoutButton}>
-        <Text style={styles.logoutButtonText}>Logout</Text>
-      </TouchableOpacity>
     </View>
   );
 }

@@ -1,5 +1,6 @@
 import { Colors } from '@/constants/colors';
 import { saveUser } from '@/services/authStorage';
+import { AntDesign } from '@expo/vector-icons';
 import auth from '@react-native-firebase/auth';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -175,7 +176,10 @@ const Signup = () => {
                 onPress={() => setShowPassword(!showPassword)}
                 style={styles.eyeButton}
               >
-                <Text style={styles.eyeText}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+                <AntDesign
+                  style={styles.eyeText}
+                  name={showConfirmPassword ? 'eye' : 'eye-invisible'}
+                />
               </TouchableOpacity>
             </View>
             <Text style={styles.hintText}>Minimum 6 characters</Text>
@@ -199,9 +203,10 @@ const Signup = () => {
                 onPress={() => setShowConfirmPassword(!showConfirmPassword)}
                 style={styles.eyeButton}
               >
-                <Text style={styles.eyeText}>
-                  {showConfirmPassword ? '👁️' : '👁️‍🗨️'}
-                </Text>
+                <AntDesign
+                  style={styles.eyeText}
+                  name={showConfirmPassword ? 'eye' : 'eye-invisible'}
+                />
               </TouchableOpacity>
             </View>
           </View>

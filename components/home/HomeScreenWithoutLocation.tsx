@@ -1,5 +1,6 @@
+import { Colors } from '@/constants/colors';
 import { AntDesign } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -24,6 +25,7 @@ interface HomeScreenWithoutLocationProps {
   allTrials: Study[];
   isLoading: boolean;
   onTrialPress: (trial: Study) => void;
+  userCondition: string; // ← Add this prop
 }
 
 export default function HomeScreenWithoutLocation({
@@ -31,9 +33,8 @@ export default function HomeScreenWithoutLocation({
   allTrials,
   isLoading,
   onTrialPress,
+  userCondition, // ← Receive the condition
 }: HomeScreenWithoutLocationProps) {
-  const [data, setData] = useState(topMatches);
-  const [paginationIndex, setPaginationIndex] = useState(0);
   const scrollX = useSharedValue(0);
   const ref = useAnimatedRef<Animated.FlatList<any>>();
 
@@ -43,37 +44,54 @@ export default function HomeScreenWithoutLocation({
     },
   });
 
-  const renderTrialCard = (
-    trial: Study,
-    index: number,
-    isHorizontal: boolean = false,
-  ) => (
-    <TouchableOpacity
-      key={index}
-      style={[styles.trialCard, isHorizontal && styles.horizontalCard]}
-      onPress={() => onTrialPress(trial)}
-    >
-      <Text style={styles.trialTitle}>
-        {trial.protocolSection?.identificationModule?.briefTitle ||
-          'Untitled Trial'}
-      </Text>
-      <Text style={styles.trialStatus}>
-        Status:{' '}
-        {trial.protocolSection?.statusModule?.overallStatus || 'Unknown'}
-      </Text>
-      {trial.protocolSection?.contactsLocationsModule?.locations?.[0] && (
-        <Text style={styles.trialLocation}>
-          {trial.protocolSection.contactsLocationsModule.locations[0].city},
-          {trial.protocolSection.contactsLocationsModule.locations[0].country}
+  // Professional vertical trial card component
+  const VerticalTrialCard = ({ trial }: { trial: Study }) => {
+    // Get location info
+    const location =
+      trial.protocolSection?.contactsLocationsModule?.locations?.[0];
+    const city = location?.city || '';
+    const country = location?.country || '';
+    const locationText =
+      city && country
+        ? `${city}, ${country}`
+        : city || country || 'Location not specified';
+
+    return (
+      <TouchableOpacity
+        style={styles.verticalCard}
+        onPress={() => onTrialPress(trial)}
+        activeOpacity={0.7}
+      >
+        {/* Title - max 2 lines */}
+        <Text style={styles.verticalTitle} numberOfLines={2}>
+          {trial.protocolSection?.identificationModule?.briefTitle ||
+            'Untitled Trial'}
         </Text>
-      )}
-    </TouchableOpacity>
-  );
+
+        {/* Row with Location and Status */}
+        <View style={styles.verticalRow}>
+          {/* Location with icon */}
+          <View style={styles.verticalLocationContainer}>
+            <Text style={styles.verticalLocationIcon}>📍</Text>
+            <Text style={styles.verticalLocationText} numberOfLines={1}>
+              {locationText}
+            </Text>
+          </View>
+
+          {/* Status badge */}
+          <View style={styles.verticalStatusBadge}>
+            <View style={styles.verticalStatusDot} />
+            <Text style={styles.verticalStatusText}>RECRUITING</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   if (isLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#6BBF73" />
+        <ActivityIndicator size="large" color={Colors.primary} />
         <Text style={styles.loadingText}>Loading trials...</Text>
       </View>
     );
@@ -81,16 +99,20 @@ export default function HomeScreenWithoutLocation({
 
   const hasNoTrials = topMatches.length === 0 && allTrials.length === 0;
 
+  // Format the condition for display (capitalize first letter)
+  const displayCondition = userCondition
+    ? userCondition.charAt(0).toUpperCase() + userCondition.slice(1)
+    : '';
+
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.container}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.scrollContent}
+    >
       {hasNoTrials ? (
         <View style={styles.emptyContainer}>
-          <AntDesign
-            name="search"
-            size={48}
-            color="#888"
-            style={styles.emptyEmoji}
-          />
+          <AntDesign name="search" size={48} color="#888" />
           <Text style={styles.emptyTitle}>No trials found</Text>
           <Text style={styles.emptyText}>
             Try searching for a different condition or location
@@ -98,14 +120,11 @@ export default function HomeScreenWithoutLocation({
         </View>
       ) : (
         <>
-          {/* Top Matches Section - Horizontal */}
+          {/* Top Matches Section - Horizontal Carousel */}
           {topMatches.length > 0 && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Top Matches</Text>
-                <Text style={styles.sectionSubtitle}>
-                  Most relevant for you
-                </Text>
               </View>
               <Animated.FlatList
                 ref={ref}
@@ -130,16 +149,20 @@ export default function HomeScreenWithoutLocation({
             </View>
           )}
 
-          {/* All Trials Section - Vertical */}
+          {/* All Trials Section - Vertical List */}
           {allTrials.length > 0 && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>All Clinical Trials</Text>
-                <Text style={styles.sectionSubtitle}>Recently updated</Text>
+                <Text style={styles.sectionTitle}>
+                  All Clinical Trials for {displayCondition}
+                </Text>
+                <Text style={styles.sectionSubtitle}>
+                  {allTrials.length} trials found
+                </Text>
               </View>
-              {allTrials.map((trial, index) =>
-                renderTrialCard(trial, index, false),
-              )}
+              {allTrials.map((trial, index) => (
+                <VerticalTrialCard key={index} trial={trial} />
+              ))}
             </View>
           )}
         </>
@@ -153,86 +176,120 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+  scrollContent: {
+    paddingBottom: 20,
+  },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#fff',
     paddingVertical: 60,
   },
   loadingText: {
     marginTop: 10,
     color: '#666',
+    fontSize: 14,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 28,
     paddingHorizontal: 16,
   },
   sectionHeader: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '700',
     color: '#1a1a1a',
+    paddingTop: 10,
   },
   sectionSubtitle: {
     fontSize: 14,
     color: '#888',
-    marginTop: 2,
+    marginTop: 4,
   },
-  horizontalList: {
-    paddingRight: 16,
-  },
-  trialCard: {
+  // Vertical Card Styles
+  verticalCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 0.3,
   },
-  horizontalCard: {
-    width: 280,
-    marginRight: 12,
-    marginBottom: 0,
-  },
-  trialTitle: {
-    fontSize: 15,
+  verticalTitle: {
+    fontSize: 16,
     fontWeight: '600',
     color: '#1a1a1a',
-    marginBottom: 6,
+    lineHeight: 22,
+    marginBottom: 12,
   },
-  trialStatus: {
+  verticalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingTop: 5,
+  },
+  verticalLocationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+  },
+  verticalLocationIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  verticalLocationText: {
     fontSize: 13,
-    color: '#6BBF73',
-    marginBottom: 4,
+    color: '#666',
+    flexShrink: 1,
   },
-  trialLocation: {
-    fontSize: 12,
-    color: '#888',
+  verticalStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: `${Colors.primary}15`,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
   },
+  verticalStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.primary,
+    marginRight: 6,
+  },
+  verticalStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.primary,
+    letterSpacing: 0.3,
+  },
+  // Empty state styles
   emptyContainer: {
     alignItems: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 16,
-  },
-  emptyEmoji: {
-    fontSize: 48,
-    marginBottom: 16,
+    paddingVertical: 80,
+    paddingHorizontal: 32,
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
     color: '#1a1a1a',
+    marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
     color: '#888',
     textAlign: 'center',
+    lineHeight: 20,
   },
 });
