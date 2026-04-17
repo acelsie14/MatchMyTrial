@@ -1,5 +1,12 @@
 import { Colors } from '@/constants/colors';
-import { useLocalSearchParams } from 'expo-router';
+import {
+  isBookmarked,
+  removeBookmark,
+  saveBookmark,
+} from '@/services/bookmarkService';
+import { Ionicons } from '@expo/vector-icons';
+import auth from '@react-native-firebase/auth';
+import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import {
@@ -89,12 +96,52 @@ export default function TrialDetailsScreen() {
   const trialParam = params.trial as string;
   const trial: Trial | null = trialParam ? JSON.parse(trialParam) : null;
   const [loading, setLoading] = useState(true);
+  const [isSaved, setIsSaved] = useState(false);
+  const [bookmarkLoading, setBookmarkLoading] = useState(false);
 
   useEffect(() => {
     if (trial) {
       setLoading(false);
+      checkBookmarkStatus();
     }
   }, [trial]);
+
+  const checkBookmarkStatus = async () => {
+    const user = auth().currentUser;
+    if (!user || !trial) return;
+
+    const trialId = trial.protocolSection?.identificationModule?.nctId;
+    if (!trialId) return;
+
+    const bookmarked = await isBookmarked(user.uid, trialId);
+    setIsSaved(bookmarked);
+  };
+
+  const handleBookmark = async () => {
+    const user = auth().currentUser;
+    if (!user) {
+      alert('Please log in to save trials');
+      return;
+    }
+
+    const trialId = trial?.protocolSection?.identificationModule?.nctId;
+    if (!trialId) return;
+
+    setBookmarkLoading(true);
+    try {
+      if (isSaved) {
+        await removeBookmark(user.uid, trialId);
+        setIsSaved(false);
+      } else {
+        await saveBookmark(user.uid, trial);
+        setIsSaved(true);
+      }
+    } catch (error) {
+      console.error('Error with bookmark:', error);
+    } finally {
+      setBookmarkLoading(false);
+    }
+  };
 
   // Helper functions
   const getBriefTitle = (): string => {
@@ -285,9 +332,26 @@ export default function TrialDetailsScreen() {
     <View style={styles.container}>
       <StatusBar style="dark" />
 
-      {/* Slimmer Header without back button */}
+      {/* Header with back button and bookmark icon */}
       <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={24} color={Colors.primary} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Trial Details</Text>
+        <TouchableOpacity
+          onPress={handleBookmark}
+          disabled={bookmarkLoading}
+          style={styles.bookmarkButton}
+        >
+          <Ionicons
+            name={isSaved ? 'bookmark' : 'bookmark-outline'}
+            size={24}
+            color={Colors.primary}
+          />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -486,8 +550,9 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 12,
@@ -495,10 +560,16 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eee',
     backgroundColor: '#fff',
   },
+  backButton: {
+    padding: 8,
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: Colors.primary,
+  },
+  bookmarkButton: {
+    padding: 8,
   },
   scrollContent: {
     paddingBottom: 40,
