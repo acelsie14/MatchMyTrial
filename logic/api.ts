@@ -74,7 +74,7 @@ async function fetchStudies(
     maxDistance,
     distanceUnit = 'km',
     sortBy = 'date', // Default to date (newest first)
-    maxPages = 20, // Default: fetch all pages (no limit)
+    maxPages = 10, // Default: fetch all pages (no limit)
     pageSize = 100, // Default: 100 per page
   } = options;
 

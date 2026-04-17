@@ -1,154 +1,324 @@
+// app/main/home.tsx
 import { logout } from '@/services/authServices';
-import React, { useState } from 'react';
+import { getUserProfile } from '@/services/firestoreService';
+import auth from '@react-native-firebase/auth';
+import { router } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Button,
-  ScrollView,
+  StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import HomeScreenWithLocation from '../../components/home/HomeScreenWithLocation';
+import HomeScreenWithoutLocation from '../../components/home/HomeScreenWithoutLocation';
 import { PatientProfile, Study } from '../../logic/api';
-import { getTopAndAllMatches } from '../../logic/filteringLogic';
+import {
+  getTopAndAllMatches,
+  matchPatientToTrials,
+} from '../../logic/filteringLogic';
 
-export default function TestScreen() {
-  const [matches, setMatches] = useState<Study[]>([]);
+export default function HomeScreen() {
+  const [userProfile, setUserProfile] = useState<PatientProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [topMatches, setTopMatches] = useState<Study[]>([]);
+  const [allTrials, setAllTrials] = useState<Study[]>([]);
+  const [locationMatches, setLocationMatches] = useState<Study[]>([]);
   const [loading, setLoading] = useState(false);
-  const [testResult, setTestResult] = useState('');
+  const [locationSearch, setLocationSearch] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [hasActiveSearch, setHasActiveSearch] = useState(false);
 
-  const runTest = async () => {
-    setLoading(true);
-    setTestResult('Running tests...');
+  // Load user profile on mount
+  useEffect(() => {
+    loadUserProfile();
+  }, []);
 
+  // Auto-load trials when profile is loaded (no location)
+  useEffect(() => {
+    if (userProfile && !hasActiveSearch) {
+      loadTrialsWithoutLocation();
+    }
+  }, [userProfile]);
+
+  const loadUserProfile = async () => {
     try {
-      // Test patient WITH location filters
-      const patient: PatientProfile = {
-        condition: 'fibroid',
-        age: 25,
-        gender: 'female',
-        // Location filters - choose ONE of these methods:
+      const user = auth().currentUser;
+      if (!user) {
+        setProfileLoading(false);
+        return;
+      }
 
-        // Method 1: Search by location name (city, state, or country)
-        locationName: 'chicago', // Finds trials in New York
-
-        // Method 2: Search by coordinates (uncomment to use)
-        // latitude: 40.7128,
-        // longitude: -74.0060,
-        // maxDistance: 50,
-        // distanceUnit: 'mi', // 'mi' for miles, 'km' for kilometers
-      };
-
-      const results = await getTopAndAllMatches(patient);
-      setMatches(results.filteredTrials);
-      setTestResult(
-        `✅ Found ${results.filteredTrials.length} matching trials`,
-      );
+      const profile = await getUserProfile(user.uid);
+      if (profile) {
+        const patientProfile: PatientProfile = {
+          condition: profile.condition,
+          age: profile.age,
+          gender: profile.gender,
+        };
+        setUserProfile(patientProfile);
+      }
     } catch (error) {
-      setTestResult(`❌ Error: ${error}`);
+      console.error('Error loading profile:', error);
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const loadTrialsWithoutLocation = async () => {
+    if (!userProfile) return;
+
+    setLoading(true);
+    try {
+      const results = await getTopAndAllMatches(userProfile);
+      setTopMatches(results.topMatches);
+      setAllTrials(results.filteredTrials);
+      setLocationMatches([]);
+    } catch (error) {
+      console.error('Error loading trials:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Test without location
-  const runTestWithoutLocation = async () => {
-    setLoading(true);
-    setTestResult('Running tests without location...');
+  const loadTrialsWithLocation = async () => {
+    if (!userProfile || !locationSearch.trim()) return;
 
+    setIsSearching(true);
     try {
-      const patient: PatientProfile = {
-        condition: 'cancer',
-        age: 40,
-        gender: 'female',
-        isPregnant: false,
-        hasRecentMajorSurgery: false,
-        isInCardiogenicShock: false,
-
-        // No location filters
+      const patientWithLocation = {
+        ...userProfile,
+        locationName: locationSearch.trim(),
       };
-
-      const results = await getTopAndAllMatches(patient);
-      setMatches(results.filteredTrials);
-      setTestResult(
-        `✅ Found ${results.filteredTrials.length} matching trials (no location filter)`,
-      );
+      const matches = await matchPatientToTrials(patientWithLocation);
+      setLocationMatches(matches);
+      setTopMatches([]);
+      setAllTrials([]);
+      setHasActiveSearch(true);
     } catch (error) {
-      setTestResult(`❌ Error: ${error}`);
+      console.error('Error loading location trials:', error);
     } finally {
-      setLoading(false);
+      setIsSearching(false);
     }
   };
+
+  const handleSearch = () => {
+    if (!locationSearch.trim()) {
+      clearSearch();
+    } else {
+      loadTrialsWithLocation();
+    }
+  };
+
+  const clearSearch = () => {
+    setLocationSearch('');
+    setHasActiveSearch(false);
+    setLocationMatches([]);
+    loadTrialsWithoutLocation();
+  };
+
+  const handleTrialPress = (trial: Study) => {
+    console.log(
+      'Trial pressed:',
+      trial.protocolSection?.identificationModule?.briefTitle,
+    );
+    // TODO: Navigate to trial details screen
+  };
+
+  if (profileLoading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#6BBF73" />
+        <Text style={styles.loadingText}>Loading your profile...</Text>
+      </View>
+    );
+  }
+
+  if (!userProfile) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.errorText}>
+          Please complete your profile setup first.
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.push('/profileSetup')}
+          style={styles.setupButton}
+        >
+          <Text style={styles.setupButtonText}>Go to Profile Setup</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
-    <ScrollView style={{ padding: 20 }}>
-      <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 10 }}>
-        Filtering Logic Test
-      </Text>
-
-      <Button title="Run Test WITH Location" onPress={runTest} />
-
-      <View style={{ marginTop: 10 }}>
-        <Button
-          title="Run Test WITHOUT Location"
-          onPress={runTestWithoutLocation}
-        />
-      </View>
-      <TouchableOpacity
-        onPress={logout}
-        style={{
-          marginTop: 20,
-          padding: 15,
-          backgroundColor: '#EF4444',
-          borderRadius: 10,
-          alignItems: 'center',
-        }}
-      >
-        <Text style={{ color: '#fff', fontWeight: 'bold' }}>Logout</Text>
-      </TouchableOpacity>
-      {loading && <ActivityIndicator size="large" style={{ marginTop: 20 }} />}
-
-      {testResult ? (
-        <Text style={{ marginTop: 20, fontSize: 16, color: 'green' }}>
-          {testResult}
+    <View style={styles.container}>
+      <StatusBar style="dark" />
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.welcomeText}>Welcome back</Text>
+        <Text style={styles.conditionText}>
+          Find the best clinical trials you
         </Text>
-      ) : null}
+      </View>
 
-      {matches.length > 0 ? (
-        <View style={{ marginTop: 20 }}>
-          <Text style={{ fontWeight: 'bold' }}>Sample Matches:</Text>
-          {matches.slice(0, matches.length).map((trial, index) => (
-            <View
-              key={index}
-              style={{ marginTop: 10, padding: 10, borderWidth: 1 }}
-            >
-              <Text>
-                <Text style={{ fontWeight: 'bold' }}>Title:</Text>{' '}
-                {trial.protocolSection?.identificationModule?.briefTitle}
-              </Text>
-              <Text>
-                <Text style={{ fontWeight: 'bold' }}>Status:</Text>{' '}
-                {trial.protocolSection?.statusModule?.overallStatus}
-              </Text>
-              {/* Display location if available */}
-              {trial.protocolSection?.contactsLocationsModule
-                ?.locations?.[0] && (
-                <Text>
-                  <Text style={{ fontWeight: 'bold' }}>Location:</Text>{' '}
-                  {
-                    trial.protocolSection.contactsLocationsModule.locations[0]
-                      .city
-                  }
-                  ,
-                  {
-                    trial.protocolSection.contactsLocationsModule.locations[0]
-                      .country
-                  }
-                </Text>
-              )}
-            </View>
-          ))}
+      {/* Location Search Bar with Search Button */}
+      <View style={styles.searchWrapper}>
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by location (city, state, or country)"
+            placeholderTextColor="#999"
+            value={locationSearch}
+            onChangeText={setLocationSearch}
+            onSubmitEditing={handleSearch}
+          />
+          {hasActiveSearch && (
+            <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+              <Text style={styles.clearButtonText}>✕</Text>
+            </TouchableOpacity>
+          )}
         </View>
-      ) : null}
-    </ScrollView>
+        <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
+          <Text style={styles.searchButtonText}>Search</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Conditionally render based on active search */}
+      {hasActiveSearch ? (
+        <HomeScreenWithLocation
+          locationSearch={locationSearch}
+          locationMatches={locationMatches}
+          isLoading={isSearching}
+          onClearSearch={clearSearch}
+          onTrialPress={handleTrialPress}
+        />
+      ) : (
+        <HomeScreenWithoutLocation
+          topMatches={topMatches}
+          allTrials={allTrials}
+          isLoading={loading}
+          onTrialPress={handleTrialPress}
+        />
+      )}
+
+      {/* Logout Button */}
+      <TouchableOpacity onPress={logout} style={styles.logoutButton}>
+        <Text style={styles.logoutButtonText}>Logout</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  loadingText: {
+    marginTop: 10,
+    color: '#666',
+  },
+  errorText: {
+    color: 'red',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  setupButton: {
+    backgroundColor: '#6BBF73',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  setupButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: 50,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    backgroundColor: '#fff',
+  },
+  welcomeText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+  },
+  conditionText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 4,
+  },
+  conditionHighlight: {
+    color: '#6BBF73',
+    fontWeight: '600',
+  },
+  searchWrapper: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  searchContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    paddingHorizontal: 12,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#1a1a1a',
+  },
+  clearButton: {
+    padding: 8,
+  },
+  clearButtonText: {
+    fontSize: 16,
+    color: '#999',
+    fontWeight: 'bold',
+  },
+  searchButton: {
+    backgroundColor: '#6BBF73',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  searchButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  logoutButton: {
+    backgroundColor: '#EF4444',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    margin: 16,
+  },
+  logoutButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+});
