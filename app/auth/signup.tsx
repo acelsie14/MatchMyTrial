@@ -67,6 +67,11 @@ const Signup = () => {
       );
       const user = userCredential.user;
 
+      // Set displayName as username
+      await user.updateProfile({
+        displayName: username,
+      });
+
       await saveUser({
         uid: user.uid,
         email: user.email || '',
@@ -178,7 +183,7 @@ const Signup = () => {
               >
                 <AntDesign
                   style={styles.eyeText}
-                  name={showConfirmPassword ? 'eye' : 'eye-invisible'}
+                  name={showPassword ? 'eye' : 'eye-invisible'}
                 />
               </TouchableOpacity>
             </View>
