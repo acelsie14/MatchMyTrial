@@ -55,7 +55,7 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
         const onPress = () => {
           tabPositionX.value = withSpring(buttonWidth * index, {
-            duration: 400,
+            duration: 200,
           });
           const event = navigation.emit({
             type: 'tabPress',

@@ -94,23 +94,74 @@ interface Intervention {
 export default function TrialDetailsScreen() {
   const params = useLocalSearchParams();
   const trialParam = params.trial as string;
-  const trial: Trial | null = trialParam ? JSON.parse(trialParam) : null;
+  const trialIdParam = params.trialId as string;
+  const [trial, setTrial] = useState<Trial | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
   const [bookmarkLoading, setBookmarkLoading] = useState(false);
 
   useEffect(() => {
-    if (trial) {
+    const loadTrialData = async () => {
+      // Case 1: Full trial object was passed (from home screen)
+      if (trialParam) {
+        try {
+          const parsedTrial = JSON.parse(trialParam);
+          setTrial(parsedTrial);
+          setLoading(false);
+          checkBookmarkStatus(parsedTrial);
+          return;
+        } catch (err) {
+          console.error('Error parsing trial param:', err);
+        }
+      }
+
+      // Case 2: trialId was passed (from bookmarks)
+      if (trialIdParam) {
+        console.log('Fetching trial from API:', trialIdParam);
+
+        try {
+          // Fetch from ClinicalTrials.gov API
+          const response = await fetch(
+            `https://clinicaltrials.gov/api/v2/studies?query.cond=${trialIdParam}&pageSize=1&format=json`,
+          );
+
+          if (!response.ok) {
+            throw new Error('Failed to fetch trial data');
+          }
+
+          const data = await response.json();
+
+          if (data.studies && data.studies.length > 0) {
+            const fetchedTrial = data.studies[0];
+            setTrial(fetchedTrial);
+            setLoading(false);
+            checkBookmarkStatus(fetchedTrial);
+            return;
+          } else {
+            throw new Error('Trial not found');
+          }
+        } catch (err) {
+          console.error('Error fetching trial:', err);
+          setError('Could not load trial details. Please try again.');
+          setLoading(false);
+          return;
+        }
+      }
+
+      // No data at all
+      setError('Could not load trial details');
       setLoading(false);
-      checkBookmarkStatus();
-    }
-  }, [trial]);
+    };
 
-  const checkBookmarkStatus = async () => {
+    loadTrialData();
+  }, [trialParam, trialIdParam]);
+
+  const checkBookmarkStatus = async (currentTrial: Trial) => {
     const user = auth().currentUser;
-    if (!user || !trial) return;
+    if (!user || !currentTrial) return;
 
-    const trialId = trial.protocolSection?.identificationModule?.nctId;
+    const trialId = currentTrial.protocolSection?.identificationModule?.nctId;
     if (!trialId) return;
 
     const bookmarked = await isBookmarked(user.uid, trialId);
@@ -124,7 +175,9 @@ export default function TrialDetailsScreen() {
       return;
     }
 
-    const trialId = trial?.protocolSection?.identificationModule?.nctId;
+    if (!trial) return;
+
+    const trialId = trial.protocolSection?.identificationModule?.nctId;
     if (!trialId) return;
 
     setBookmarkLoading(true);
@@ -324,6 +377,20 @@ export default function TrialDetailsScreen() {
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.primary} />
         <Text style={styles.loadingText}>Loading trial details...</Text>
+      </View>
+    );
+  }
+
+  if (error || !trial) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.errorText}>{error || 'Trial not found'}</Text>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.errorButton}
+        >
+          <Text style={styles.errorButtonText}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -548,6 +615,23 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 10,
     color: '#666',
+  },
+  errorText: {
+    fontSize: 16,
+    color: 'red',
+    textAlign: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 20,
+  },
+  errorButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  errorButtonText: {
+    color: '#fff',
+    fontWeight: '600',
   },
   header: {
     flexDirection: 'row',
