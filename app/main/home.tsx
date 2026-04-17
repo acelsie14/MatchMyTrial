@@ -124,6 +124,10 @@ export default function HomeScreen() {
       trial.protocolSection?.identificationModule?.briefTitle,
     );
     // TODO: Navigate to trial details screen
+    router.push({
+      pathname: '/trialDetail',
+      params: { trial: JSON.stringify(trial) },
+    });
   };
 
   if (profileLoading) {
