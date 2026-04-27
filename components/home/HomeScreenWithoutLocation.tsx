@@ -156,9 +156,9 @@ export default function HomeScreenWithoutLocation({
                 <Text style={styles.sectionTitle}>
                   All Clinical Trials for {displayCondition}
                 </Text>
-                <Text style={styles.sectionSubtitle}>
+                {/* <Text style={styles.sectionSubtitle}>
                   {allTrials.length} trials found
-                </Text>
+                </Text> */}
               </View>
               {allTrials.map((trial, index) => (
                 <VerticalTrialCard key={index} trial={trial} />

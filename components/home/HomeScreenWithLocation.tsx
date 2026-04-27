@@ -54,12 +54,12 @@ export default function HomeScreenWithLocation({
         {/* Row with Location and Status */}
         <View style={styles.verticalRow}>
           {/* Location with icon */}
-          <View style={styles.verticalLocationContainer}>
+          {/* <View style={styles.verticalLocationContainer}>
             <Text style={styles.verticalLocationIcon}>📍</Text>
             <Text style={styles.verticalLocationText} numberOfLines={1}>
               {locationText}
             </Text>
-          </View>
+          </View> */}
 
           {/* Status badge */}
           <View style={styles.verticalStatusBadge}>
@@ -95,9 +95,9 @@ export default function HomeScreenWithLocation({
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Matches in {displayLocation}</Text>
-          <Text style={styles.sectionSubtitle}>
+          {/* <Text style={styles.sectionSubtitle}>
             {locationMatches.length} trials found
-          </Text>
+          </Text> */}
         </View>
 
         {locationMatches.length > 0 ? (

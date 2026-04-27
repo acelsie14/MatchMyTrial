@@ -11,7 +11,7 @@ export default function MainLayout() {
       />
       <Tabs.Screen
         name="applied"
-        options={{ title: 'Applied', headerShown: false }}
+        options={{ title: 'Saved', headerShown: false }}
       />
       <Tabs.Screen
         name="profile"

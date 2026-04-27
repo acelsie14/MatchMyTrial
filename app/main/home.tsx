@@ -1,3 +1,4 @@
+import { Colors } from '@/constants/colors';
 import { getUserProfile } from '@/services/firestoreService';
 import auth from '@react-native-firebase/auth';
 import { router } from 'expo-router';
@@ -99,7 +100,10 @@ export default function HomeScreen() {
     } catch (error) {
       console.error('Error loading location trials:', error);
     } finally {
-      setIsSearching(false);
+      // Small delay to ensure loading indicator is visible
+      setTimeout(() => {
+        setIsSearching(false);
+      }, 500);
     }
   };
 
@@ -123,7 +127,6 @@ export default function HomeScreen() {
       'Trial pressed:',
       trial.protocolSection?.identificationModule?.briefTitle,
     );
-    // TODO: Navigate to trial details screen
     router.push({
       pathname: '/trialDetail',
       params: { trial: JSON.stringify(trial) },
@@ -162,7 +165,7 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <Text style={styles.welcomeText}>Welcome back</Text>
         <Text style={styles.conditionText}>
-          Find the best clinical trials you
+          Find the best clinical trials for you
         </Text>
       </View>
 
@@ -183,29 +186,51 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
         </View>
-        <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
-          <Text style={styles.searchButtonText}>Search</Text>
+        <TouchableOpacity
+          style={[
+            styles.searchButton,
+            isSearching && styles.searchButtonDisabled,
+          ]}
+          onPress={handleSearch}
+          disabled={isSearching}
+        >
+          {isSearching ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.searchButtonText}>Search</Text>
+          )}
         </TouchableOpacity>
       </View>
 
-      {/* Conditionally render based on active search */}
-      {hasActiveSearch ? (
-        <HomeScreenWithLocation
-          locationSearch={locationSearch}
-          locationMatches={locationMatches}
-          isLoading={isSearching}
-          onClearSearch={clearSearch}
-          onTrialPress={handleTrialPress}
-        />
-      ) : (
-        <HomeScreenWithoutLocation
-          topMatches={topMatches}
-          allTrials={allTrials}
-          isLoading={loading}
-          onTrialPress={handleTrialPress}
-          userCondition={userProfile?.condition}
-        />
+      {/* Show loading indicator while searching */}
+      {isSearching && (
+        <View style={styles.searchingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.searchingText}>
+            Searching for trials in {locationSearch}...
+          </Text>
+        </View>
       )}
+
+      {/* Conditionally render based on active search */}
+      {!isSearching &&
+        (hasActiveSearch ? (
+          <HomeScreenWithLocation
+            locationSearch={locationSearch}
+            locationMatches={locationMatches}
+            isLoading={false}
+            onClearSearch={clearSearch}
+            onTrialPress={handleTrialPress}
+          />
+        ) : (
+          <HomeScreenWithoutLocation
+            topMatches={topMatches}
+            allTrials={allTrials}
+            isLoading={loading}
+            onTrialPress={handleTrialPress}
+            userCondition={userProfile?.condition}
+          />
+        ))}
     </View>
   );
 }
@@ -301,11 +326,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    minWidth: 80,
+  },
+  searchButtonDisabled: {
+    backgroundColor: '#a8d4a8',
   },
   searchButtonText: {
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  searchingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingVertical: 60,
+  },
+  searchingText: {
+    marginTop: 16,
+    color: '#666',
+    fontSize: 16,
+    textAlign: 'center',
   },
   logoutButton: {
     backgroundColor: '#EF4444',
