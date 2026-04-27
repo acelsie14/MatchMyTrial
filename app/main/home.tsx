@@ -30,10 +30,25 @@ export default function HomeScreen() {
   const [locationSearch, setLocationSearch] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [hasActiveSearch, setHasActiveSearch] = useState(false);
+  const [greeting, setGreeting] = useState('');
 
-  // Load user profile on mount
+  // Function to get greeting based on time of day
+  const getTimeBasedGreeting = () => {
+    const hour = new Date().getHours();
+
+    if (hour < 12) {
+      return 'Good Morning';
+    } else if (hour < 17) {
+      return 'Good Afternoon';
+    } else {
+      return 'Good Evening';
+    }
+  };
+
+  // Load user profile on mount and set greeting
   useEffect(() => {
     loadUserProfile();
+    setGreeting(getTimeBasedGreeting());
   }, []);
 
   // Auto-load trials when profile is loaded (no location)
@@ -163,7 +178,7 @@ export default function HomeScreen() {
       <StatusBar style="dark" />
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.welcomeText}>Welcome back</Text>
+        <Text style={styles.welcomeText}>{greeting} 👋</Text>
         <Text style={styles.conditionText}>
           Find the best clinical trials for you
         </Text>
