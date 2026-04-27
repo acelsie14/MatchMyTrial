@@ -58,8 +58,8 @@ interface FetchOptions {
   maxDistance?: number;
   distanceUnit?: 'mi' | 'km';
   sortBy?: 'relevance' | 'date'; // NEW: control sorting
-  maxPages?: number; // NEW: limit number of pages
-  pageSize?: number; // NEW: control items per page
+  maxPages?: number; // limit number of pages
+  pageSize?: number; //  control items per page
 }
 
 async function fetchStudies(

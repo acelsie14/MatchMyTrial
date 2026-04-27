@@ -7,7 +7,6 @@ async function applyCoreFilters(
 ): Promise<Study[]> {
   console.log(`\n🔍 Applying core filters to ${studies.length} studies...`);
 
-  // Filter by Status = RECRUITING
   let filteredStudies = studies.filter((study) => {
     const status = study.protocolSection?.statusModule?.overallStatus;
     return status === 'RECRUITING';
@@ -16,7 +15,6 @@ async function applyCoreFilters(
     `After status filter (RECRUITING): ${filteredStudies.length} studies`,
   );
 
-  // Filter by Age Range
   filteredStudies = filteredStudies.filter((study) => {
     const minAge = parseInt(
       study.protocolSection?.eligibilityModule?.minimumAge || '0',
@@ -24,15 +22,12 @@ async function applyCoreFilters(
     const maxAge = parseInt(
       study.protocolSection?.eligibilityModule?.maximumAge || '999',
     );
-
     return patient.age >= minAge && patient.age <= maxAge;
   });
   console.log(`After age filter: ${filteredStudies.length} studies`);
 
-  // Filter by Gender
   filteredStudies = filteredStudies.filter((study) => {
     const requiredSex = study.protocolSection?.eligibilityModule?.sex || 'ALL';
-
     if (requiredSex === 'MALE' && patient.gender !== 'male') return false;
     if (requiredSex === 'FEMALE' && patient.gender !== 'female') return false;
     return true;
@@ -48,11 +43,10 @@ async function fetchTopMatches(patient: PatientProfile): Promise<Study[]> {
     `\n⭐ Fetching TOP MATCHES (relevance sort) for: ${patient.condition}`,
   );
 
-  // Fetch raw trials from API
   const rawTopMatches = await fetchStudies(patient.condition, {
     sortBy: 'relevance',
-    maxPages: 5, // Limit to first 5 pages for performance
-    pageSize: 100, // Fetch more then filter down to 5
+    maxPages: 1,
+    pageSize: 50,
     locationName: patient.locationName,
     latitude: patient.latitude,
     longitude: patient.longitude,
@@ -62,17 +56,39 @@ async function fetchTopMatches(patient: PatientProfile): Promise<Study[]> {
 
   console.log(`Raw top matches from API: ${rawTopMatches.length}`);
 
-  // Apply age, gender, status filters
   const filteredMatches = await applyCoreFilters(patient, rawTopMatches);
-
-  // Take only top 5 after filtering
   const top5Matches = filteredMatches.slice(0, 5);
 
   console.log(`⭐ Top matches after filters: ${top5Matches.length}`);
   return top5Matches;
 }
 
-// Fetch all trials (date sort, all pages) WITH filters applied
+// NEW: Fetch ONLY first page of trials (20 trials) - FAST initial load
+async function fetchFirstPageTrials(patient: PatientProfile): Promise<Study[]> {
+  console.log(
+    `\n📋 Fetching FIRST PAGE TRIALS (20 trials) for: ${patient.condition}`,
+  );
+
+  const rawTrials = await fetchStudies(patient.condition, {
+    sortBy: 'date',
+    maxPages: 1, // Only 1 page
+    pageSize: 40, // Only 20 trials
+    locationName: patient.locationName,
+    latitude: patient.latitude,
+    longitude: patient.longitude,
+    maxDistance: patient.maxDistance,
+    distanceUnit: patient.distanceUnit || 'km',
+  });
+
+  console.log(`Raw trials from API: ${rawTrials.length}`);
+
+  const filteredTrials = await applyCoreFilters(patient, rawTrials);
+
+  console.log(`📋 First page trials after filters: ${filteredTrials.length}`);
+  return filteredTrials;
+}
+
+// Fetch ALL trials (date sort, all pages) - SLOW, only when user clicks "See More"
 async function fetchAllTrials(patient: PatientProfile): Promise<Study[]> {
   console.log(`\n📋 Fetching ALL TRIALS (date sort) for: ${patient.condition}`);
 
@@ -87,7 +103,6 @@ async function fetchAllTrials(patient: PatientProfile): Promise<Study[]> {
 
   console.log(`Raw trials from API: ${rawTrials.length}`);
 
-  // Apply age, gender, status filters
   const filteredTrials = await applyCoreFilters(patient, rawTrials);
 
   console.log(`📋 All trials after filters: ${filteredTrials.length}`);
@@ -100,7 +115,6 @@ async function applyApiFilters(patient: PatientProfile): Promise<Study[]> {
     `Patient Info: ${patient.age}yo, ${patient.gender}, Condition: ${patient.condition}`,
   );
 
-  // Location info if provided
   if (patient.locationName) {
     console.log(`Location filter: ${patient.locationName}`);
   }
@@ -110,7 +124,6 @@ async function applyApiFilters(patient: PatientProfile): Promise<Study[]> {
     );
   }
 
-  // Fetch all studies for the patient's condition with location filters
   console.log(`\n📡 Fetching studies for condition: ${patient.condition}...`);
   let allStudies = await fetchStudies(patient.condition, {
     locationName: patient.locationName,
@@ -121,7 +134,6 @@ async function applyApiFilters(patient: PatientProfile): Promise<Study[]> {
   });
   console.log(`Total studies fetched: ${allStudies.length}`);
 
-  // Apply core filters
   const filteredStudies = await applyCoreFilters(patient, allStudies);
 
   console.log(
@@ -152,29 +164,24 @@ async function matchPatientToTrials(patient: PatientProfile): Promise<Study[]> {
   return afterApiFilters;
 }
 
-// Combined function that returns both top matches and all trials
-async function getTopAndAllMatches(patient: PatientProfile): Promise<{
+// Combined function that returns top matches (NOT all trials anymore)
+async function getTopMatchesOnly(patient: PatientProfile): Promise<{
   topMatches: Study[];
-  filteredTrials: Study[];
 }> {
-  console.log('\n🚀 FETCHING BOTH TOP MATCHES AND ALL TRIALS');
+  console.log('\n🚀 FETCHING TOP MATCHES ONLY');
 
-  // Fetch top matches with filters applied
   const topMatches = await fetchTopMatches(patient);
-
-  // Fetch all trials with filters applied
-  const filteredTrials = await fetchAllTrials(patient);
 
   return {
     topMatches,
-    filteredTrials,
   };
 }
 
 export {
   applyApiFilters,
   fetchAllTrials,
+  fetchFirstPageTrials,
   fetchTopMatches,
-  getTopAndAllMatches,
+  getTopMatchesOnly,
   matchPatientToTrials,
 };

@@ -17,7 +17,8 @@ import HomeScreenWithLocation from '../../components/home/HomeScreenWithLocation
 import HomeScreenWithoutLocation from '../../components/home/HomeScreenWithoutLocation';
 import { PatientProfile, Study } from '../../logic/api';
 import {
-  getTopAndAllMatches,
+  fetchFirstPageTrials,
+  fetchTopMatches,
   matchPatientToTrials,
 } from '../../logic/filteringLogic';
 
@@ -25,7 +26,7 @@ export default function HomeScreen() {
   const [userProfile, setUserProfile] = useState<PatientProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [topMatches, setTopMatches] = useState<Study[]>([]);
-  const [allTrials, setAllTrials] = useState<Study[]>([]);
+  const [initialTrials, setInitialTrials] = useState<Study[]>([]);
   const [locationMatches, setLocationMatches] = useState<Study[]>([]);
   const [loading, setLoading] = useState(false);
   const [locationSearch, setLocationSearch] = useState('');
@@ -33,28 +34,21 @@ export default function HomeScreen() {
   const [hasActiveSearch, setHasActiveSearch] = useState(false);
   const [greeting, setGreeting] = useState('');
 
-  // Function to get greeting based on time of day
   const getTimeBasedGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) {
-      return 'Good Morning';
-    } else if (hour < 17) {
-      return 'Good Afternoon';
-    } else {
-      return 'Good Evening';
-    }
+    if (hour < 12) return 'Good Morning';
+    else if (hour < 17) return 'Good Afternoon';
+    else return 'Good Evening';
   };
 
-  // Load user profile on mount and set greeting
   useEffect(() => {
     loadUserProfile();
     setGreeting(getTimeBasedGreeting());
   }, []);
 
-  // Auto-load trials when profile is loaded (no location)
   useEffect(() => {
     if (userProfile && !hasActiveSearch) {
-      loadTrialsWithoutLocation();
+      loadInitialTrials();
     }
   }, [userProfile]);
 
@@ -66,7 +60,6 @@ export default function HomeScreen() {
         return;
       }
 
-      // Try to load from cache first (instant)
       const cachedProfile = await AsyncStorage.getItem('cachedUserProfile');
       if (cachedProfile) {
         const parsed = JSON.parse(cachedProfile);
@@ -77,13 +70,10 @@ export default function HomeScreen() {
         };
         setUserProfile(patientProfile);
         setProfileLoading(false);
-
-        // Still fetch from Firestore to update cache if needed
         fetchAndUpdateProfile(user.uid);
         return;
       }
 
-      // No cache, load from Firestore
       const profile = await getUserProfile(user.uid);
       if (profile) {
         const patientProfile: PatientProfile = {
@@ -92,7 +82,6 @@ export default function HomeScreen() {
           gender: profile.gender,
         };
         setUserProfile(patientProfile);
-        // Save to cache for next time
         await AsyncStorage.setItem(
           'cachedUserProfile',
           JSON.stringify(patientProfile),
@@ -125,17 +114,21 @@ export default function HomeScreen() {
     }
   };
 
-  const loadTrialsWithoutLocation = async () => {
+  // ONLY fetch top matches and first page of trials (20 items) - FAST
+  const loadInitialTrials = async () => {
     if (!userProfile) return;
 
     setLoading(true);
     try {
-      const results = await getTopAndAllMatches(userProfile);
-      setTopMatches(results.topMatches);
-      setAllTrials(results.filteredTrials);
+      const topMatchesData = await fetchTopMatches(userProfile);
+      setTopMatches(topMatchesData);
+
+      const firstPageTrials = await fetchFirstPageTrials(userProfile);
+      setInitialTrials(firstPageTrials);
+
       setLocationMatches([]);
     } catch (error) {
-      console.error('Error loading trials:', error);
+      console.error('Error loading initial trials:', error);
     } finally {
       setLoading(false);
     }
@@ -153,7 +146,7 @@ export default function HomeScreen() {
       const matches = await matchPatientToTrials(patientWithLocation);
       setLocationMatches(matches);
       setTopMatches([]);
-      setAllTrials([]);
+      setInitialTrials([]);
       setHasActiveSearch(true);
     } catch (error) {
       console.error('Error loading location trials:', error);
@@ -176,21 +169,16 @@ export default function HomeScreen() {
     setLocationSearch('');
     setHasActiveSearch(false);
     setLocationMatches([]);
-    loadTrialsWithoutLocation();
+    loadInitialTrials();
   };
 
   const handleTrialPress = (trial: Study) => {
-    console.log(
-      'Trial pressed:',
-      trial.protocolSection?.identificationModule?.briefTitle,
-    );
     router.push({
       pathname: '/trialDetail',
       params: { trial: JSON.stringify(trial) },
     });
   };
 
-  // Show splash-style loading instead of spinner
   if (profileLoading) {
     return (
       <View style={styles.splashContainer}>
@@ -224,7 +212,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
-      {/* Header */}
+
       <View style={styles.header}>
         <Text style={styles.welcomeText}>{greeting} 👋</Text>
         <Text style={styles.conditionText}>
@@ -232,7 +220,6 @@ export default function HomeScreen() {
         </Text>
       </View>
 
-      {/* Location Search Bar with Search Button */}
       <View style={styles.searchWrapper}>
         <View style={styles.searchContainer}>
           <TextInput
@@ -265,7 +252,6 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Show loading indicator while searching */}
       {isSearching && (
         <View style={styles.searchingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
@@ -275,7 +261,6 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Conditionally render based on active search */}
       {!isSearching &&
         (hasActiveSearch ? (
           <HomeScreenWithLocation
@@ -288,10 +273,11 @@ export default function HomeScreen() {
         ) : (
           <HomeScreenWithoutLocation
             topMatches={topMatches}
-            allTrials={allTrials}
+            allTrials={initialTrials}
             isLoading={loading}
             onTrialPress={handleTrialPress}
             userCondition={userProfile?.condition}
+            userProfile={userProfile}
           />
         ))}
     </View>
@@ -299,35 +285,22 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#fff',
   },
-  loadingText: {
-    marginTop: 10,
-    color: '#666',
-  },
-  errorText: {
-    color: 'red',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
+  loadingText: { marginTop: 10, color: '#666' },
+  errorText: { color: 'red', textAlign: 'center', marginBottom: 16 },
   setupButton: {
     backgroundColor: '#6BBF73',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 8,
   },
-  setupButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
+  setupButtonText: { color: '#fff', fontWeight: 'bold' },
   header: {
     paddingHorizontal: 16,
     paddingTop: 50,
@@ -336,20 +309,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eee',
     backgroundColor: '#fff',
   },
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-  },
-  conditionText: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 4,
-  },
-  conditionHighlight: {
-    color: '#6BBF73',
-    fontWeight: '600',
-  },
+  welcomeText: { fontSize: 24, fontWeight: 'bold', color: '#1a1a1a' },
+  conditionText: { fontSize: 16, color: '#666', marginTop: 4 },
   searchWrapper: {
     flexDirection: 'row',
     gap: 10,
@@ -369,20 +330,9 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
     paddingHorizontal: 12,
   },
-  searchInput: {
-    flex: 1,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#1a1a1a',
-  },
-  clearButton: {
-    padding: 8,
-  },
-  clearButtonText: {
-    fontSize: 16,
-    color: '#999',
-    fontWeight: 'bold',
-  },
+  searchInput: { flex: 1, paddingVertical: 12, fontSize: 16, color: '#1a1a1a' },
+  clearButton: { padding: 8 },
+  clearButtonText: { fontSize: 16, color: '#999', fontWeight: 'bold' },
   searchButton: {
     backgroundColor: '#6BBF73',
     borderRadius: 12,
@@ -391,14 +341,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minWidth: 80,
   },
-  searchButtonDisabled: {
-    backgroundColor: '#a8d4a8',
-  },
-  searchButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
+  searchButtonDisabled: { backgroundColor: '#a8d4a8' },
+  searchButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
   searchingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -412,19 +356,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
-  logoutButton: {
-    backgroundColor: '#EF4444',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    margin: 16,
-  },
-  logoutButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  // Splash-style loading screen (matches your splash screen)
   splashContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -445,9 +376,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 1,
   },
-  splashEmoji: {
-    fontSize: 60,
-  },
+  splashEmoji: { fontSize: 60 },
   splashAppName: {
     fontSize: 32,
     fontWeight: '700',

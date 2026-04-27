@@ -1,5 +1,6 @@
 import { Colors } from '@/constants/colors';
 import { AntDesign } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React from 'react';
 import {
   ActivityIndicator,
@@ -25,7 +26,8 @@ interface HomeScreenWithoutLocationProps {
   allTrials: Study[];
   isLoading: boolean;
   onTrialPress: (trial: Study) => void;
-  userCondition: string; // ← Add this prop
+  userCondition: string;
+  userProfile?: any;
 }
 
 export default function HomeScreenWithoutLocation({
@@ -33,7 +35,8 @@ export default function HomeScreenWithoutLocation({
   allTrials,
   isLoading,
   onTrialPress,
-  userCondition, // ← Receive the condition
+  userCondition,
+  userProfile,
 }: HomeScreenWithoutLocationProps) {
   const scrollX = useSharedValue(0);
   const ref = useAnimatedRef<Animated.FlatList<any>>();
@@ -44,9 +47,7 @@ export default function HomeScreenWithoutLocation({
     },
   });
 
-  // Professional vertical trial card component
   const VerticalTrialCard = ({ trial }: { trial: Study }) => {
-    // Get location info
     const location =
       trial.protocolSection?.contactsLocationsModule?.locations?.[0];
     const city = location?.city || '';
@@ -62,15 +63,12 @@ export default function HomeScreenWithoutLocation({
         onPress={() => onTrialPress(trial)}
         activeOpacity={0.7}
       >
-        {/* Title - max 2 lines */}
         <Text style={styles.verticalTitle} numberOfLines={2}>
           {trial.protocolSection?.identificationModule?.briefTitle ||
             'Untitled Trial'}
         </Text>
 
-        {/* Row with Location and Status */}
         <View style={styles.verticalRow}>
-          {/* Location with icon */}
           <View style={styles.verticalLocationContainer}>
             <Text style={styles.verticalLocationIcon}>📍</Text>
             <Text style={styles.verticalLocationText} numberOfLines={1}>
@@ -78,7 +76,6 @@ export default function HomeScreenWithoutLocation({
             </Text>
           </View>
 
-          {/* Status badge */}
           <View style={styles.verticalStatusBadge}>
             <View style={styles.verticalStatusDot} />
             <Text style={styles.verticalStatusText}>RECRUITING</Text>
@@ -88,7 +85,20 @@ export default function HomeScreenWithoutLocation({
     );
   };
 
-  if (isLoading) {
+  const handleSeeMore = () => {
+    if (userProfile) {
+      router.push({
+        pathname: '/allTrials',
+        params: {
+          condition: userProfile.condition,
+          age: userProfile.age.toString(),
+          gender: userProfile.gender,
+        },
+      });
+    }
+  };
+
+  if (isLoading && allTrials.length === 0) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={Colors.primary} />
@@ -99,7 +109,6 @@ export default function HomeScreenWithoutLocation({
 
   const hasNoTrials = topMatches.length === 0 && allTrials.length === 0;
 
-  // Format the condition for display (capitalize first letter)
   const displayCondition = userCondition
     ? userCondition.charAt(0).toUpperCase() + userCondition.slice(1)
     : '';
@@ -120,7 +129,7 @@ export default function HomeScreenWithoutLocation({
         </View>
       ) : (
         <>
-          {/* Top Matches Section - Horizontal Carousel */}
+          {/* Top Matches Section */}
           {topMatches.length > 0 && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -149,17 +158,19 @@ export default function HomeScreenWithoutLocation({
             </View>
           )}
 
-          {/* All Trials Section - Vertical List */}
+          {/* All Trials Section */}
           {allTrials.length > 0 && (
             <View style={styles.section}>
-              <View style={styles.sectionHeader}>
+              {/* Header with Title and See More link on the same row */}
+              <View style={styles.sectionHeaderRow}>
                 <Text style={styles.sectionTitle}>
                   All Clinical Trials for {displayCondition}
                 </Text>
-                {/* <Text style={styles.sectionSubtitle}>
-                  {allTrials.length} trials found
-                </Text> */}
+                <TouchableOpacity onPress={handleSeeMore}>
+                  <Text style={styles.seeMoreLink}>See More</Text>
+                </TouchableOpacity>
               </View>
+
               {allTrials.map((trial, index) => (
                 <VerticalTrialCard key={index} trial={trial} />
               ))}
@@ -172,13 +183,8 @@ export default function HomeScreenWithoutLocation({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  scrollContent: {
-    paddingBottom: 20,
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
+  scrollContent: { paddingBottom: 20 },
   centered: {
     flex: 1,
     justifyContent: 'center',
@@ -186,30 +192,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     paddingVertical: 60,
   },
-  loadingText: {
-    marginTop: 10,
-    color: '#666',
-    fontSize: 14,
-  },
-  section: {
-    marginBottom: 28,
-    paddingHorizontal: 16,
-  },
-  sectionHeader: {
+  loadingText: { marginTop: 10, color: '#666', fontSize: 14 },
+  section: { marginBottom: 28, paddingHorizontal: 16 },
+  sectionHeader: { marginBottom: 16 },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 16,
+    paddingTop: 10,
   },
   sectionTitle: {
     fontSize: 22,
     fontWeight: '700',
     color: '#1a1a1a',
-    paddingTop: 10,
+    flex: 1,
   },
-  sectionSubtitle: {
+  seeMoreLink: {
     fontSize: 14,
-    color: '#888',
-    marginTop: 4,
+    fontWeight: '600',
+    color: Colors.primary,
   },
-  // Vertical Card Styles
   verticalCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -243,15 +246,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexShrink: 1,
   },
-  verticalLocationIcon: {
-    fontSize: 14,
-    marginRight: 6,
-  },
-  verticalLocationText: {
-    fontSize: 13,
-    color: '#666',
-    flexShrink: 1,
-  },
+  verticalLocationIcon: { fontSize: 14, marginRight: 6 },
+  verticalLocationText: { fontSize: 13, color: '#666', flexShrink: 1 },
   verticalStatusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -273,7 +269,6 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     letterSpacing: 0.3,
   },
-  // Empty state styles
   emptyContainer: {
     alignItems: 'center',
     paddingVertical: 80,
