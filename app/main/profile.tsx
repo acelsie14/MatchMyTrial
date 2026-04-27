@@ -1,25 +1,33 @@
 import { Colors } from '@/constants/colors';
 import { logout } from '@/services/authServices';
 import { getUserProfile, saveUserProfile } from '@/services/firestoreService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import ChangePasswordModal from '../../components/ChangePasswordModal';
 
 export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -27,6 +35,7 @@ export default function ProfileScreen() {
   const [gender, setGender] = useState('');
   const [condition, setCondition] = useState('');
 
+  const [originalUsername, setOriginalUsername] = useState('');
   const [originalAge, setOriginalAge] = useState('');
   const [originalGender, setOriginalGender] = useState('');
   const [originalCondition, setOriginalCondition] = useState('');
@@ -45,6 +54,7 @@ export default function ProfileScreen() {
 
       setUsername(user.displayName || '');
       setEmail(user.email || '');
+      setOriginalUsername(user.displayName || '');
 
       const profile = await getUserProfile(user.uid);
       if (profile) {
@@ -64,13 +74,16 @@ export default function ProfileScreen() {
   };
 
   const handleEdit = () => {
+    setOriginalUsername(username);
     setOriginalAge(age);
     setOriginalGender(gender);
     setOriginalCondition(condition);
     setIsEditing(true);
+    setShowMoreMenu(false);
   };
 
   const handleCancel = () => {
+    setUsername(originalUsername);
     setAge(originalAge);
     setGender(originalGender);
     setCondition(originalCondition);
@@ -83,6 +96,19 @@ export default function ProfileScreen() {
 
     setSaving(true);
     try {
+      // Update display name in Firebase Auth
+      if (username !== originalUsername) {
+        await user.updateProfile({ displayName: username });
+        // Update cached user in AsyncStorage
+        const { saveUser } = require('@/services/authStorage');
+        await saveUser({
+          uid: user.uid,
+          email: email,
+          username: username,
+        });
+      }
+
+      // Update medical info in Firestore
       await saveUserProfile(user.uid, {
         age: parseInt(age, 10) || 0,
         gender: gender.toLowerCase(),
@@ -91,12 +117,89 @@ export default function ProfileScreen() {
 
       setIsEditing(false);
       Alert.alert('Success', 'Profile updated successfully');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving profile:', error);
       Alert.alert('Error', 'Failed to update profile. Please try again.');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDeleteAccount = async () => {
+    const user = auth().currentUser;
+    if (!user) return;
+
+    Alert.alert(
+      'Delete Account',
+      'Are you sure you want to delete your account? This action is permanent and cannot be undone. All your data will be permanently removed.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Show loading indicator
+              setLoading(true);
+
+              // 1. Delete user profile from Firestore
+              await firestore().collection('users').doc(user.uid).delete();
+
+              // 2. Delete saved trials from Firestore
+              const savedTrialsSnapshot = await firestore()
+                .collection('savedTrials')
+                .where('userId', '==', user.uid)
+                .get();
+
+              const batch = firestore().batch();
+              savedTrialsSnapshot.forEach((doc) => {
+                batch.delete(doc.ref);
+              });
+              await batch.commit();
+
+              // 3. Delete the user from Firebase Auth
+              await user.delete();
+
+              // 4. Clear local storage
+              const { removeUser } = require('@/services/authStorage');
+              await removeUser();
+              await AsyncStorage.removeItem('cachedUserProfile');
+
+              // 5. Navigate to login screen
+              router.replace('/auth/login');
+              Alert.alert(
+                'Account Deleted',
+                'Your account has been successfully deleted.',
+              );
+            } catch (error: any) {
+              console.error('Error deleting account:', error);
+              if (error.code === 'auth/requires-recent-login') {
+                Alert.alert(
+                  'Authentication Required',
+                  'For security reasons, please log out and log back in before deleting your account.',
+                  [
+                    {
+                      text: 'OK',
+                      onPress: async () => {
+                        await logout();
+                        router.replace('/auth/login');
+                      },
+                    },
+                  ],
+                );
+              } else {
+                Alert.alert(
+                  'Error',
+                  'Failed to delete account. Please try again.',
+                );
+              }
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleLogout = () => {
@@ -113,13 +216,41 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const handleChangePassword = () => {
-    Alert.alert(
-      'Change Password',
-      'This feature will be available soon. For now, you can reset your password using "Forgot Password" on the login screen.',
-      [{ text: 'OK' }],
-    );
+  const closeAllMenus = () => {
+    setShowMoreMenu(false);
   };
+
+  const MoreMenu = () => (
+    <View style={styles.menuContainer}>
+      <TouchableOpacity
+        style={styles.menuItem}
+        onPress={() => {
+          setShowMoreMenu(false);
+          setShowPasswordModal(true);
+        }}
+      >
+        <Text style={styles.menuItemText}>Change Password</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.menuItem, styles.menuItemDestructive]}
+        onPress={() => {
+          setShowMoreMenu(false);
+          handleDeleteAccount();
+        }}
+      >
+        <Text style={styles.menuItemDestructiveText}>Delete Account</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.menuItem, styles.menuItemLast]}
+        onPress={() => {
+          setShowMoreMenu(false);
+          handleLogout();
+        }}
+      >
+        <Text style={styles.menuItemLogoutText}>Logout</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   if (loading) {
     return (
@@ -130,205 +261,233 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar style="dark" />
+    <TouchableWithoutFeedback onPress={closeAllMenus}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
+      >
+        <StatusBar style="dark" />
 
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile</Text>
-        {!isEditing ? (
-          <TouchableOpacity onPress={handleEdit} style={styles.editButton}>
-            <Text style={styles.editButtonText}>Edit</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.editActions}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Profile</Text>
+          <View style={styles.headerButtons}>
+            {!isEditing ? (
+              <TouchableOpacity
+                onPress={handleEdit}
+                style={styles.headerButton}
+              >
+                <Text style={styles.headerButtonText}>Edit</Text>
+              </TouchableOpacity>
+            ) : (
+              <>
+                <TouchableOpacity
+                  onPress={handleCancel}
+                  style={styles.headerButton}
+                >
+                  <Text style={styles.headerButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleSave}
+                  style={styles.headerButton}
+                  disabled={saving}
+                >
+                  <Text style={styles.headerButtonText}>
+                    {saving ? 'Saving...' : 'Save'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
             <TouchableOpacity
-              onPress={handleCancel}
-              style={styles.cancelButton}
+              onPress={() => setShowMoreMenu(!showMoreMenu)}
+              style={styles.headerButton}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={styles.headerButtonText}>⋯</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleSave}
-              style={styles.saveButton}
-              disabled={saving}
-            >
-              <Text style={styles.saveButtonText}>
-                {saving ? 'Saving...' : 'Save'}
-              </Text>
-            </TouchableOpacity>
+          </View>
+        </View>
+
+        {showMoreMenu && (
+          <View style={styles.menuWrapper}>
+            <MoreMenu />
           </View>
         )}
-      </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Profile Card */}
-        <View style={styles.profileCard}>
-          <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>
-              {username ? username.charAt(0).toUpperCase() : '👤'}
-            </Text>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            isEditing && styles.scrollContentEditing,
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Profile Card */}
+          <View style={styles.profileCard}>
+            <View style={styles.avatarContainer}>
+              <Text style={styles.avatarText}>
+                {username ? username.charAt(0).toUpperCase() : '👤'}
+              </Text>
+            </View>
+            <Text style={styles.profileName}>{username || 'User'}</Text>
+            <Text style={styles.profileEmail}>{email}</Text>
           </View>
-          <Text style={styles.profileName}>{username || 'User'}</Text>
-          <Text style={styles.profileEmail}>{email}</Text>
-        </View>
 
-        {/* Account Information */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account Information</Text>
-
-          <View style={styles.infoCard}>
-            <View style={styles.infoRow}>
-              <View style={styles.infoIcon}>
-                <Text style={styles.infoIconText}>👤</Text>
+          {/* Account Information */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Account Information</Text>
+            <View style={styles.infoCard}>
+              <View style={styles.infoRow}>
+                <View style={styles.infoIcon}>
+                  <Text style={styles.infoIconText}>👤</Text>
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Username</Text>
+                  {isEditing ? (
+                    <TextInput
+                      style={styles.input}
+                      value={username}
+                      onChangeText={setUsername}
+                      placeholder="Enter username"
+                      placeholderTextColor="#999"
+                    />
+                  ) : (
+                    <Text style={styles.infoValue}>
+                      {username || 'Not set'}
+                    </Text>
+                  )}
+                </View>
               </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Username</Text>
-                <Text style={styles.infoValue}>{username || 'Not set'}</Text>
-              </View>
-            </View>
 
-            <View style={styles.divider} />
+              <View style={styles.divider} />
 
-            <View style={styles.infoRow}>
-              <View style={styles.infoIcon}>
-                <Text style={styles.infoIconText}>📧</Text>
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Email</Text>
-                <Text style={styles.infoValue}>{email}</Text>
+              <View style={styles.infoRow}>
+                <View style={styles.infoIcon}>
+                  <Text style={styles.infoIconText}>📧</Text>
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Email</Text>
+                  <Text style={styles.infoValue}>{email}</Text>
+                </View>
               </View>
             </View>
           </View>
-        </View>
 
-        {/* Medical Information */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Medical Information</Text>
-
-          <View style={styles.infoCard}>
-            <View style={styles.infoRow}>
-              <View style={styles.infoIcon}>
-                <Text style={styles.infoIconText}>🎂</Text>
+          {/* Medical Information */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Medical Information</Text>
+            <View style={styles.infoCard}>
+              <View style={styles.infoRow}>
+                <View style={styles.infoIcon}>
+                  <Text style={styles.infoIconText}>🎂</Text>
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Age</Text>
+                  {isEditing ? (
+                    <TextInput
+                      style={styles.input}
+                      value={age}
+                      onChangeText={setAge}
+                      keyboardType="number-pad"
+                      placeholder="Enter your age"
+                      placeholderTextColor="#999"
+                    />
+                  ) : (
+                    <Text style={styles.infoValue}>{age || 'Not set'}</Text>
+                  )}
+                </View>
               </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Age</Text>
-                {isEditing ? (
-                  <TextInput
-                    style={styles.input}
-                    value={age}
-                    onChangeText={setAge}
-                    keyboardType="number-pad"
-                    placeholder="Enter your age"
-                    placeholderTextColor="#999"
-                  />
-                ) : (
-                  <Text style={styles.infoValue}>{age || 'Not set'}</Text>
-                )}
-              </View>
-            </View>
 
-            <View style={styles.divider} />
+              <View style={styles.divider} />
 
-            <View style={styles.infoRow}>
-              <View style={styles.infoIcon}>
-                <Text style={styles.infoIconText}>⚥</Text>
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Gender</Text>
-                {isEditing ? (
-                  <View style={styles.genderContainer}>
-                    <TouchableOpacity
-                      style={[
-                        styles.genderOption,
-                        gender === 'male' && styles.genderOptionSelected,
-                      ]}
-                      onPress={() => setGender('male')}
-                    >
-                      <Text
+              <View style={styles.infoRow}>
+                <View style={styles.infoIcon}>
+                  <Text style={styles.infoIconText}>⚥</Text>
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Gender</Text>
+                  {isEditing ? (
+                    <View style={styles.genderContainer}>
+                      <TouchableOpacity
                         style={[
-                          styles.genderOptionText,
-                          gender === 'male' && styles.genderOptionTextSelected,
+                          styles.genderOption,
+                          gender === 'male' && styles.genderOptionSelected,
                         ]}
+                        onPress={() => setGender('male')}
                       >
-                        Male
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.genderOption,
-                        gender === 'female' && styles.genderOptionSelected,
-                      ]}
-                      onPress={() => setGender('female')}
-                    >
-                      <Text
+                        <Text
+                          style={[
+                            styles.genderOptionText,
+                            gender === 'male' &&
+                              styles.genderOptionTextSelected,
+                          ]}
+                        >
+                          Male
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
                         style={[
-                          styles.genderOptionText,
-                          gender === 'female' &&
-                            styles.genderOptionTextSelected,
+                          styles.genderOption,
+                          gender === 'female' && styles.genderOptionSelected,
                         ]}
+                        onPress={() => setGender('female')}
                       >
-                        Female
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <Text style={styles.infoValue}>
-                    {gender
-                      ? gender.charAt(0).toUpperCase() + gender.slice(1)
-                      : 'Not set'}
-                  </Text>
-                )}
+                        <Text
+                          style={[
+                            styles.genderOptionText,
+                            gender === 'female' &&
+                              styles.genderOptionTextSelected,
+                          ]}
+                        >
+                          Female
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <Text style={styles.infoValue}>
+                      {gender
+                        ? gender.charAt(0).toUpperCase() + gender.slice(1)
+                        : 'Not set'}
+                    </Text>
+                  )}
+                </View>
               </View>
-            </View>
 
-            <View style={styles.divider} />
+              <View style={styles.divider} />
 
-            <View style={styles.infoRow}>
-              <View style={styles.infoIcon}>
-                <Text style={styles.infoIconText}>🏥</Text>
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Medical Condition</Text>
-                {isEditing ? (
-                  <TextInput
-                    style={styles.input}
-                    value={condition}
-                    onChangeText={setCondition}
-                    placeholder="e.g., Diabetes, Cancer, Asthma"
-                    placeholderTextColor="#999"
-                  />
-                ) : (
-                  <Text style={styles.infoValue}>{condition || 'Not set'}</Text>
-                )}
+              <View style={styles.infoRow}>
+                <View style={styles.infoIcon}>
+                  <Text style={styles.infoIconText}>🏥</Text>
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Medical Condition</Text>
+                  {isEditing ? (
+                    <TextInput
+                      style={styles.input}
+                      value={condition}
+                      onChangeText={setCondition}
+                      placeholder="e.g., Diabetes, Cancer, Asthma"
+                      placeholderTextColor="#999"
+                    />
+                  ) : (
+                    <Text style={styles.infoValue}>
+                      {condition || 'Not set'}
+                    </Text>
+                  )}
+                </View>
               </View>
             </View>
           </View>
-        </View>
 
-        {/* Account Actions - Moved inside ScrollView with extra bottom padding */}
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            onPress={handleChangePassword}
-            style={styles.actionButton}
-          >
-            <Text style={styles.actionButtonText}>Change Password</Text>
-          </TouchableOpacity>
+          {/* Extra spacer when in edit mode to ensure content clears the keyboard */}
+          {isEditing && <View style={styles.editModeSpacer} />}
+        </ScrollView>
 
-          <TouchableOpacity
-            onPress={handleLogout}
-            style={[styles.actionButton, styles.logoutButton]}
-          >
-            <Text style={styles.logoutButtonText}>Logout</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Extra spacer to ensure content clears the tab bar */}
-        <View style={styles.bottomSpacer} />
-      </ScrollView>
-    </View>
+        <ChangePasswordModal
+          visible={showPasswordModal}
+          onClose={() => setShowPasswordModal(false)}
+        />
+      </KeyboardAvoidingView>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -359,45 +518,65 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1a1a1a',
   },
-  editButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: Colors.primary,
-    borderRadius: 10,
-  },
-  editButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  editActions: {
+  headerButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 16,
   },
-  cancelButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#e5e5e5',
-    borderRadius: 10,
+  headerButton: {
+    padding: 4,
   },
-  cancelButtonText: {
-    color: '#666',
+  headerButtonText: {
+    fontSize: 16,
     fontWeight: '600',
-    fontSize: 14,
+    color: Colors.primary,
   },
-  saveButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: Colors.primary,
-    borderRadius: 10,
+  menuWrapper: {
+    position: 'absolute',
+    top: 100,
+    right: 20,
+    zIndex: 1000,
   },
-  saveButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
+  menuContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    overflow: 'hidden',
+    minWidth: 180,
+  },
+  menuItem: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  menuItemLast: {
+    borderBottomWidth: 0,
+  },
+  menuItemDestructive: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  menuItemText: {
+    fontSize: 15,
+    color: '#1a1a1a',
+  },
+  menuItemDestructiveText: {
+    fontSize: 15,
+    color: '#DC2626',
+  },
+  menuItemLogoutText: {
+    fontSize: 15,
+    color: '#DC2626',
   },
   scrollContent: {
-    paddingBottom: 0,
+    paddingBottom: 20,
+  },
+  scrollContentEditing: {
+    paddingBottom: 120,
   },
   profileCard: {
     backgroundColor: Colors.primary,
@@ -527,36 +706,10 @@ const styles = StyleSheet.create({
   genderOptionTextSelected: {
     color: '#fff',
   },
-  actionsContainer: {
-    marginHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 0,
-  },
-  actionButton: {
-    paddingVertical: 16,
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    borderRadius: 16,
-    marginBottom: 12,
-  },
-  actionButtonText: {
-    color: Colors.primary,
-    fontWeight: '500',
-    fontSize: 15,
-  },
-  logoutButton: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FEE2E2',
-    marginBottom: 50,
-  },
-  logoutButtonText: {
-    color: '#DC2626',
-    fontWeight: '500',
-    fontSize: 15,
-  },
   bottomSpacer: {
-    height: 80, // Extra space to clear the tab bar
+    height: 40,
+  },
+  editModeSpacer: {
+    height: 100,
   },
 });
