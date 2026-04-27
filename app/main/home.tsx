@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from '@react-native-firebase/auth';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   StyleSheet,
@@ -29,6 +29,7 @@ export default function HomeScreen() {
   const [initialTrials, setInitialTrials] = useState<Study[]>([]);
   const [locationMatches, setLocationMatches] = useState<Study[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [locationSearch, setLocationSearch] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [hasActiveSearch, setHasActiveSearch] = useState(false);
@@ -133,6 +134,55 @@ export default function HomeScreen() {
       setLoading(false);
     }
   };
+
+  // Pull-to-refresh handler - RELOADS PROFILE FIRST then trials
+  // ✅ FIXED: Added userProfile to dependency array
+  const onRefresh = useCallback(async () => {
+    if (!userProfile) return;
+
+    console.log('🔄 REFRESH STARTED');
+    setRefreshing(true);
+
+    try {
+      // STEP 1: Reload user profile from Firestore
+      const user = auth().currentUser;
+      if (user) {
+        const freshProfile = await getUserProfile(user.uid);
+        if (freshProfile) {
+          const updatedProfile: PatientProfile = {
+            condition: freshProfile.condition,
+            age: freshProfile.age,
+            gender: freshProfile.gender as 'male' | 'female',
+          };
+
+          // Update the userProfile state
+          setUserProfile(updatedProfile);
+
+          // Update cache
+          await AsyncStorage.setItem(
+            'cachedUserProfile',
+            JSON.stringify(updatedProfile),
+          );
+
+          // STEP 2: Fetch trials with the UPDATED profile
+          const topMatchesData = await fetchTopMatches(updatedProfile);
+          const firstPageTrials = await fetchFirstPageTrials(updatedProfile);
+
+          setTopMatches(topMatchesData);
+          setInitialTrials(firstPageTrials);
+
+          console.log(
+            '✅ REFRESH COMPLETE - New condition:',
+            freshProfile.condition,
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [userProfile]); // ✅ Added userProfile to dependencies
 
   const loadTrialsWithLocation = async () => {
     if (!userProfile || !locationSearch.trim()) return;
@@ -275,6 +325,8 @@ export default function HomeScreen() {
             topMatches={topMatches}
             allTrials={initialTrials}
             isLoading={loading}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
             onTrialPress={handleTrialPress}
             userCondition={userProfile?.condition}
             userProfile={userProfile}

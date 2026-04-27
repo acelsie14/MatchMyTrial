@@ -5,6 +5,7 @@ import React from 'react';
 import {
   ActivityIndicator,
   Dimensions,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -25,6 +26,8 @@ interface HomeScreenWithoutLocationProps {
   topMatches: Study[];
   allTrials: Study[];
   isLoading: boolean;
+  refreshing: boolean;
+  onRefresh: () => void;
   onTrialPress: (trial: Study) => void;
   userCondition: string;
   userProfile?: any;
@@ -34,6 +37,8 @@ export default function HomeScreenWithoutLocation({
   topMatches,
   allTrials,
   isLoading,
+  refreshing,
+  onRefresh,
   onTrialPress,
   userCondition,
   userProfile,
@@ -118,6 +123,14 @@ export default function HomeScreenWithoutLocation({
       style={styles.container}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.scrollContent}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[Colors.primary]}
+          tintColor={Colors.primary}
+        />
+      }
     >
       {hasNoTrials ? (
         <View style={styles.emptyContainer}>
@@ -161,7 +174,6 @@ export default function HomeScreenWithoutLocation({
           {/* All Trials Section */}
           {allTrials.length > 0 && (
             <View style={styles.section}>
-              {/* Header with Title and See More link on the same row */}
               <View style={styles.sectionHeaderRow}>
                 <Text style={styles.sectionTitle}>
                   All Clinical Trials for {displayCondition}
