@@ -1,5 +1,6 @@
 import { Colors } from '@/constants/colors';
 import { getUserProfile } from '@/services/firestoreService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from '@react-native-firebase/auth';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -35,7 +36,6 @@ export default function HomeScreen() {
   // Function to get greeting based on time of day
   const getTimeBasedGreeting = () => {
     const hour = new Date().getHours();
-
     if (hour < 12) {
       return 'Good Morning';
     } else if (hour < 17) {
@@ -66,6 +66,24 @@ export default function HomeScreen() {
         return;
       }
 
+      // Try to load from cache first (instant)
+      const cachedProfile = await AsyncStorage.getItem('cachedUserProfile');
+      if (cachedProfile) {
+        const parsed = JSON.parse(cachedProfile);
+        const patientProfile: PatientProfile = {
+          condition: parsed.condition,
+          age: parsed.age,
+          gender: parsed.gender,
+        };
+        setUserProfile(patientProfile);
+        setProfileLoading(false);
+
+        // Still fetch from Firestore to update cache if needed
+        fetchAndUpdateProfile(user.uid);
+        return;
+      }
+
+      // No cache, load from Firestore
       const profile = await getUserProfile(user.uid);
       if (profile) {
         const patientProfile: PatientProfile = {
@@ -74,11 +92,36 @@ export default function HomeScreen() {
           gender: profile.gender,
         };
         setUserProfile(patientProfile);
+        // Save to cache for next time
+        await AsyncStorage.setItem(
+          'cachedUserProfile',
+          JSON.stringify(patientProfile),
+        );
       }
     } catch (error) {
       console.error('Error loading profile:', error);
     } finally {
       setProfileLoading(false);
+    }
+  };
+
+  const fetchAndUpdateProfile = async (userId: string) => {
+    try {
+      const profile = await getUserProfile(userId);
+      if (profile) {
+        const patientProfile: PatientProfile = {
+          condition: profile.condition,
+          age: profile.age,
+          gender: profile.gender,
+        };
+        setUserProfile(patientProfile);
+        await AsyncStorage.setItem(
+          'cachedUserProfile',
+          JSON.stringify(patientProfile),
+        );
+      }
+    } catch (error) {
+      console.error('Error updating profile from Firestore:', error);
     }
   };
 
@@ -115,7 +158,6 @@ export default function HomeScreen() {
     } catch (error) {
       console.error('Error loading location trials:', error);
     } finally {
-      // Small delay to ensure loading indicator is visible
       setTimeout(() => {
         setIsSearching(false);
       }, 500);
@@ -148,11 +190,17 @@ export default function HomeScreen() {
     });
   };
 
+  // Show splash-style loading instead of spinner
   if (profileLoading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#6BBF73" />
-        <Text style={styles.loadingText}>Loading your profile...</Text>
+      <View style={styles.splashContainer}>
+        <View style={styles.splashLogoContainer}>
+          <Text style={styles.splashEmoji}>🩺</Text>
+        </View>
+        <Text style={styles.splashAppName}>MatchMyTrial</Text>
+        <Text style={styles.splashTagline}>
+          Finding your perfect clinical trial match
+        </Text>
       </View>
     );
   }
@@ -375,5 +423,43 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  // Splash-style loading screen (matches your splash screen)
+  splashContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#6BBF73',
+  },
+  splashLogoContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  splashEmoji: {
+    fontSize: 60,
+  },
+  splashAppName: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 12,
+    letterSpacing: 0.5,
+  },
+  splashTagline: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.85)',
+    textAlign: 'center',
+    paddingHorizontal: 40,
+    lineHeight: 22,
   },
 });

@@ -1,6 +1,7 @@
 import DropDown from '@/components/DropDown';
 import { Colors } from '@/constants/colors';
 import { saveUserProfile } from '@/services/firestoreService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from '@react-native-firebase/auth';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -60,11 +61,20 @@ const ProfileSetup = () => {
         return;
       }
 
-      await saveUserProfile(user.uid, {
+      const profileData = {
         age: parseInt(age, 10),
         gender: gender.toLowerCase(),
         condition: condition,
-      });
+      };
+
+      // Save to Firestore
+      await saveUserProfile(user.uid, profileData);
+
+      // Save to AsyncStorage cache for faster loading next time
+      await AsyncStorage.setItem(
+        'cachedUserProfile',
+        JSON.stringify(profileData),
+      );
 
       // ✅ Navigate to index to re-check profile (will now go to home)
       router.replace('/');
