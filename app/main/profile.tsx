@@ -36,7 +36,6 @@ export default function ProfileScreen() {
   const [condition, setCondition] = useState('');
 
   const [originalUsername, setOriginalUsername] = useState('');
-  const [originalAge, setOriginalAge] = useState('');
   const [originalGender, setOriginalGender] = useState('');
   const [originalCondition, setOriginalCondition] = useState('');
 
@@ -62,7 +61,6 @@ export default function ProfileScreen() {
         setGender(profile.gender || '');
         setCondition(profile.condition || '');
 
-        setOriginalAge(profile.age?.toString() || '');
         setOriginalGender(profile.gender || '');
         setOriginalCondition(profile.condition || '');
       }
@@ -75,7 +73,6 @@ export default function ProfileScreen() {
 
   const handleEdit = () => {
     setOriginalUsername(username);
-    setOriginalAge(age);
     setOriginalGender(gender);
     setOriginalCondition(condition);
     setIsEditing(true);
@@ -84,7 +81,6 @@ export default function ProfileScreen() {
 
   const handleCancel = () => {
     setUsername(originalUsername);
-    setAge(originalAge);
     setGender(originalGender);
     setCondition(originalCondition);
     setIsEditing(false);
@@ -139,16 +135,16 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Show loading indicator
               setLoading(true);
+              const userId = user.uid;
 
               // 1. Delete user profile from Firestore
-              await firestore().collection('users').doc(user.uid).delete();
+              await firestore().collection('users').doc(userId).delete();
 
               // 2. Delete saved trials from Firestore
               const savedTrialsSnapshot = await firestore()
                 .collection('savedTrials')
-                .where('userId', '==', user.uid)
+                .where('userId', '==', userId)
                 .get();
 
               const batch = firestore().batch();
@@ -157,22 +153,24 @@ export default function ProfileScreen() {
               });
               await batch.commit();
 
-              // 3. Delete the user from Firebase Auth
-              await user.delete();
-
-              // 4. Clear local storage
+              // 3. Clear local storage
               const { removeUser } = require('@/services/authStorage');
               await removeUser();
               await AsyncStorage.removeItem('cachedUserProfile');
 
-              // 5. Navigate to login screen
-              router.replace('/auth/login');
+              // 4. Delete the user from Firebase Auth
+              await user.delete();
+
+              // 5. Show success alert and navigate
               Alert.alert(
                 'Account Deleted',
                 'Your account has been successfully deleted.',
+                [{ text: 'OK', onPress: () => router.replace('/auth/login') }],
               );
             } catch (error: any) {
               console.error('Error deleting account:', error);
+              setLoading(false);
+
               if (error.code === 'auth/requires-recent-login') {
                 Alert.alert(
                   'Authentication Required',
@@ -187,14 +185,17 @@ export default function ProfileScreen() {
                     },
                   ],
                 );
+              } else if (error.code === 'auth/network-request-failed') {
+                Alert.alert(
+                  'Network Error',
+                  'Please check your internet connection and try again.',
+                );
               } else {
                 Alert.alert(
                   'Error',
-                  'Failed to delete account. Please try again.',
+                  `Failed to delete account: ${error.message || 'Please try again.'}`,
                 );
               }
-            } finally {
-              setLoading(false);
             }
           },
         },
@@ -332,10 +333,11 @@ export default function ProfileScreen() {
             <Text style={styles.profileEmail}>{email}</Text>
           </View>
 
-          {/* Account Information */}
+          {/* Account Information (Combined) */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Account Information</Text>
             <View style={styles.infoCard}>
+              {/* Username - Editable */}
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
                   <Text style={styles.infoIconText}>👤</Text>
@@ -360,6 +362,7 @@ export default function ProfileScreen() {
 
               <View style={styles.divider} />
 
+              {/* Email - Not Editable */}
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
                   <Text style={styles.infoIconText}>📧</Text>
@@ -369,36 +372,23 @@ export default function ProfileScreen() {
                   <Text style={styles.infoValue}>{email}</Text>
                 </View>
               </View>
-            </View>
-          </View>
 
-          {/* Medical Information */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Medical Information</Text>
-            <View style={styles.infoCard}>
+              <View style={styles.divider} />
+
+              {/* Age - Display Only, Not Editable */}
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
                   <Text style={styles.infoIconText}>🎂</Text>
                 </View>
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Age</Text>
-                  {isEditing ? (
-                    <TextInput
-                      style={styles.input}
-                      value={age}
-                      onChangeText={setAge}
-                      keyboardType="number-pad"
-                      placeholder="Enter your age"
-                      placeholderTextColor="#999"
-                    />
-                  ) : (
-                    <Text style={styles.infoValue}>{age || 'Not set'}</Text>
-                  )}
+                  <Text style={styles.infoValue}>{age || 'Not set'}</Text>
                 </View>
               </View>
 
               <View style={styles.divider} />
 
+              {/* Gender - Editable */}
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
                   <Text style={styles.infoIconText}>⚥</Text>
@@ -454,6 +444,7 @@ export default function ProfileScreen() {
 
               <View style={styles.divider} />
 
+              {/* Medical Condition - Editable */}
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
                   <Text style={styles.infoIconText}>🏥</Text>
@@ -478,7 +469,6 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Extra spacer when in edit mode to ensure content clears the keyboard */}
           {isEditing && <View style={styles.editModeSpacer} />}
         </ScrollView>
 

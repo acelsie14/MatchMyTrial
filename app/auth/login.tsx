@@ -27,57 +27,102 @@ const Login = () => {
   const router = useRouter();
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      setError('Please enter both email and password');
+    // Clear previous errors
+    setError('');
+
+    // Validation
+    if (!email.trim()) {
+      setError('Please enter your email address');
+      return;
+    }
+    if (!password) {
+      setError('Please enter your password');
       return;
     }
 
     setLoading(true);
-    setError('');
 
     try {
       const userCredential = await auth().signInWithEmailAndPassword(
-        email,
+        email.trim(),
         password,
       );
       const user = userCredential.user;
 
+      // Check email verification
       if (!user.emailVerified) {
         await auth().signOut();
-        setError('Please verify your email before logging in.');
+        setError(
+          'Email not verified. Please check your inbox and click the verification link before logging in.',
+        );
         setLoading(false);
         return;
       }
 
-      if (user) {
-        await saveUser({
-          uid: user.uid,
-          email: user.email || '',
-          username: user.displayName || '',
-        });
-      }
+      // Save user data
+      await saveUser({
+        uid: user.uid,
+        email: user.email || '',
+        username: user.displayName || '',
+      });
+
       router.replace('/');
     } catch (error: any) {
       const errorCode = error.code;
 
+      // Detailed error messages
       switch (errorCode) {
         case 'auth/invalid-email':
-          setError('Please enter a valid email address');
+          setError(
+            'The email address format is invalid. Please enter a valid email (e.g., name@example.com).',
+          );
           break;
+
+        case 'auth/user-disabled':
+          setError(
+            'This account has been disabled. Please contact support for assistance.',
+          );
+          break;
+
         case 'auth/user-not-found':
-          setError('No account found with this email. Please sign up first.');
+          setError(
+            'No account found with this email address. Please check your email or sign up to create a new account.',
+          );
           break;
+
         case 'auth/wrong-password':
-          setError('Incorrect password. Please try again.');
+          setError(
+            'Incorrect password. Please try again or use "Forgot Password" to reset it.',
+          );
           break;
+
         case 'auth/too-many-requests':
-          setError('Too many failed attempts. Please try again later.');
+          setError(
+            'Too many failed login attempts. Please wait a few minutes before trying again, or reset your password.',
+          );
           break;
+
         case 'auth/network-request-failed':
-          setError('No internet connection. Please check your network.');
+          setError(
+            'Network connection failed. Please check your internet connection and try again.',
+          );
           break;
+
+        case 'auth/invalid-credential':
+          setError(
+            'Invalid login credentials. Please check your email and password and try again.',
+          );
+          break;
+
+        case 'auth/operation-not-allowed':
+          setError(
+            'Email/password sign-in is not enabled. Please contact support.',
+          );
+          break;
+
         default:
-          setError('Failed to sign in. Please try again.');
+          setError('Unable to sign in. Please try again later.');
+          console.error('Unhandled login error:', errorCode, error.message);
           break;
       }
     } finally {
@@ -86,7 +131,7 @@ const Login = () => {
   };
 
   const handleResendVerification = async () => {
-    if (!email) {
+    if (!email.trim()) {
       Alert.alert(
         'Email Required',
         'Please enter your email address to resend the verification link.',
@@ -96,16 +141,40 @@ const Login = () => {
 
     setResetLoading(true);
     try {
-      await auth().sendPasswordResetEmail(email);
+      // First check if account exists
+      const signInMethods = await auth().fetchSignInMethodsForEmail(
+        email.trim(),
+      );
+
+      if (signInMethods.length === 0) {
+        Alert.alert(
+          'Account Not Found',
+          'No account exists with this email address. Please sign up first.',
+          [
+            { text: 'OK' },
+            { text: 'Sign Up', onPress: () => router.replace('/auth/signup') },
+          ],
+        );
+        return;
+      }
+
+      // Send verification email
+      const actionCodeSettings = {
+        url: 'https://matchmytrial.page.link/verify',
+        handleCodeInApp: true,
+      };
+
+      await auth().sendSignInLinkToEmail(email.trim(), actionCodeSettings);
       Alert.alert(
         'Verification Email Sent',
         `A verification link has been sent to ${email}. Please check your inbox and spam folder.`,
         [{ text: 'OK' }],
       );
     } catch (error: any) {
+      console.error('Resend error:', error);
       Alert.alert(
-        'Error',
-        'Unable to send verification email. Please ensure you have an account with this email address.',
+        'Unable to Send',
+        'We could not send a verification email. Please ensure you have an account with this email address.',
         [{ text: 'OK' }],
       );
     } finally {
@@ -114,7 +183,7 @@ const Login = () => {
   };
 
   const handleForgotPassword = async () => {
-    if (!email) {
+    if (!email.trim()) {
       Alert.alert(
         'Email Required',
         'Please enter your email address to reset your password.',
@@ -124,10 +193,10 @@ const Login = () => {
 
     setResetLoading(true);
     try {
-      await auth().sendPasswordResetEmail(email);
+      await auth().sendPasswordResetEmail(email.trim());
       Alert.alert(
         'Password Reset Email Sent',
-        `We've sent a password reset link to ${email}. Please check your inbox.`,
+        `We've sent a password reset link to ${email}. Please check your inbox and follow the instructions to reset your password.`,
         [{ text: 'OK' }],
       );
     } catch (error: any) {
@@ -139,7 +208,14 @@ const Login = () => {
         case 'auth/user-not-found':
           Alert.alert(
             'Account Not Found',
-            'No account exists with this email address.',
+            'No account exists with this email address. Please sign up first.',
+            [
+              { text: 'OK' },
+              {
+                text: 'Sign Up',
+                onPress: () => router.replace('/auth/signup'),
+              },
+            ],
           );
           break;
         case 'auth/too-many-requests':
@@ -257,7 +333,6 @@ const Login = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Resend Verification*/}
         <View style={styles.resendContainer}>
           <TouchableOpacity
             onPress={handleResendVerification}
