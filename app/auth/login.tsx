@@ -36,8 +36,19 @@ const Login = () => {
     setError('');
 
     try {
-      await auth().signInWithEmailAndPassword(email, password);
-      const user = auth().currentUser;
+      const userCredential = await auth().signInWithEmailAndPassword(
+        email,
+        password,
+      );
+      const user = userCredential.user;
+
+      if (!user.emailVerified) {
+        await auth().signOut();
+        setError('Please verify your email before logging in.');
+        setLoading(false);
+        return;
+      }
+
       if (user) {
         await saveUser({
           uid: user.uid,
@@ -74,6 +85,34 @@ const Login = () => {
     }
   };
 
+  const handleResendVerification = async () => {
+    if (!email) {
+      Alert.alert(
+        'Email Required',
+        'Please enter your email address to resend the verification link.',
+      );
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      await auth().sendPasswordResetEmail(email);
+      Alert.alert(
+        'Verification Email Sent',
+        `A verification link has been sent to ${email}. Please check your inbox and spam folder.`,
+        [{ text: 'OK' }],
+      );
+    } catch (error: any) {
+      Alert.alert(
+        'Error',
+        'Unable to send verification email. Please ensure you have an account with this email address.',
+        [{ text: 'OK' }],
+      );
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   const handleForgotPassword = async () => {
     if (!email) {
       Alert.alert(
@@ -88,7 +127,7 @@ const Login = () => {
       await auth().sendPasswordResetEmail(email);
       Alert.alert(
         'Password Reset Email Sent',
-        `We've sent a password reset link to ${email}. Please check your inbox and follow the instructions to reset your password.`,
+        `We've sent a password reset link to ${email}. Please check your inbox.`,
         [{ text: 'OK' }],
       );
     } catch (error: any) {
@@ -186,7 +225,6 @@ const Login = () => {
             </View>
           </View>
 
-          {/* Forgot Password Link - Now in place of show password text */}
           <TouchableOpacity
             onPress={handleForgotPassword}
             disabled={resetLoading}
@@ -216,6 +254,18 @@ const Login = () => {
           <Text style={styles.footerText}>Don&apos;t have an account?</Text>
           <TouchableOpacity onPress={() => router.replace('/auth/signup')}>
             <Text style={styles.linkText}>Sign Up</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Resend Verification*/}
+        <View style={styles.resendContainer}>
+          <TouchableOpacity
+            onPress={handleResendVerification}
+            disabled={resetLoading}
+          >
+            <Text style={styles.resendText}>
+              Didn&apos;t receive verification email?
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -270,7 +320,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   form: {
-    marginBottom: 32,
+    marginBottom: 24,
   },
   inputContainer: {
     marginBottom: 20,
@@ -337,6 +387,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
+    marginBottom: 20,
   },
   footerText: {
     fontSize: 14,
@@ -346,5 +397,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.primary,
     fontWeight: '600',
+  },
+  resendContainer: {
+    alignItems: 'center',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5E5',
+  },
+  resendText: {
+    fontSize: 13,
+    color: '#888',
   },
 });

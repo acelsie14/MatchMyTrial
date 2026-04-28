@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -80,13 +81,21 @@ const Signup = () => {
         displayName: username,
       });
 
+      // ✅ Send verification email
+      await user.sendEmailVerification();
+
       await saveUser({
         uid: user.uid,
         email: user.email || '',
         username: username,
       });
 
-      router.replace('/');
+      // ✅ Redirect to login with a message to verify email
+      Alert.alert(
+        'Verification Email Sent',
+        'Please check your inbox and verify your email address before logging in.',
+        [{ text: 'OK', onPress: () => router.replace('/auth/login') }],
+      );
     } catch (error: any) {
       const errorCode = error.code;
 
@@ -351,7 +360,6 @@ const Signup = () => {
               editable={!loading}
             />
             <View style={styles.warningContainer}>
-              {/* <AntDesign name="infocirlceo" size={14} color="#F59E0B" /> */}
               <Text style={styles.warningText}>
                 For privacy, avoid using your real name as username
               </Text>
@@ -427,7 +435,6 @@ const Signup = () => {
             </View>
           </View>
 
-          {/* Terms and Conditions Checkbox with Modal Links */}
           <View style={styles.termsContainer}>
             <TouchableOpacity
               style={styles.checkbox}
@@ -483,7 +490,6 @@ const Signup = () => {
         </View>
       </View>
 
-      {/* Modals */}
       <TermsModal />
       <PrivacyModal />
     </KeyboardAvoidingView>
@@ -660,7 +666,6 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontWeight: '600',
   },
-  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
