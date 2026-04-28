@@ -1,4 +1,4 @@
-import { AntDesign } from '@expo/vector-icons';
+import { FontAwesome } from '@expo/vector-icons';
 import React, { useCallback, useRef, useState } from 'react';
 import {
   FlatList,
@@ -54,7 +54,8 @@ const DropDown = ({ data, onChange, placeholder }: DropDownProps) => {
     >
       <TouchableOpacity style={styles.button} onPress={toggleExpanded}>
         <Text style={styles.text}>{value || placeholder}</Text>
-        <AntDesign name={expanded ? 'up' : 'down'} />
+
+        <FontAwesome name={expanded ? 'sort-up' : 'sort-down'} />
       </TouchableOpacity>
       {expanded ? (
         <Modal visible={expanded} transparent>
@@ -108,10 +109,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     // top: 53,
     backgroundColor: '#fff',
-    width: '100%',
+    width: '98%',
     padding: 10,
     borderRadius: 6,
     maxHeight: 250,
+    borderColor: '#ccc',
+    borderWidth: 0.5,
   },
   optionItem: {
     height: 40,

@@ -2,6 +2,7 @@ import DropDown from '@/components/DropDown';
 import { Colors } from '@/constants/colors';
 import { saveUserProfile } from '@/services/firestoreService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import auth from '@react-native-firebase/auth';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -18,20 +19,43 @@ import {
 } from 'react-native';
 
 const ProfileSetup = () => {
-  const [age, setAge] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [gender, setGender] = useState('');
   const [condition, setCondition] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Calculate age from date of birth
+  const calculateAge = (birthDate: Date): number => {
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (
+      monthDiff < 0 ||
+      (monthDiff === 0 && today.getDate() < birthDate.getDate())
+    ) {
+      age--;
+    }
+    return age;
+  };
+
+  const formatDate = (date: Date): string => {
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
   const validateForm = () => {
-    if (!age) {
-      setError('Please enter your age');
+    if (!dateOfBirth) {
+      setError('Please enter your date of birth');
       return false;
     }
-    const ageNum = parseInt(age, 10);
-    if (isNaN(ageNum)) {
-      setError('Please enter your age');
+    const age = calculateAge(dateOfBirth);
+    if (age < 0 || age > 120) {
+      setError('Please enter a valid date of birth');
       return false;
     }
     if (!gender) {
@@ -61,27 +85,32 @@ const ProfileSetup = () => {
         return;
       }
 
+      const age = calculateAge(dateOfBirth);
       const profileData = {
-        age: parseInt(age, 10),
+        age: age,
+        dateOfBirth: dateOfBirth.toISOString(),
         gender: gender.toLowerCase(),
         condition: condition,
       };
 
-      // Save to Firestore
       await saveUserProfile(user.uid, profileData);
-
-      // Save to AsyncStorage cache for faster loading next time
       await AsyncStorage.setItem(
         'cachedUserProfile',
         JSON.stringify(profileData),
       );
 
-      // ✅ Navigate to index to re-check profile (will now go to home)
       router.replace('/');
     } catch (err) {
       setError('Failed to save profile. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setDateOfBirth(selectedDate);
     }
   };
 
@@ -109,23 +138,31 @@ const ProfileSetup = () => {
           ) : null}
 
           <View style={styles.form}>
+            {/* Date of Birth Field */}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>
-                Age <Text style={styles.required}>*</Text>
+                Date of Birth <Text style={styles.required}>*</Text>
               </Text>
-              <TextInput
-                placeholder="Enter your age"
-                value={age}
-                onChangeText={(text) => {
-                  setError('');
-                  setAge(text);
-                }}
-                keyboardType="number-pad"
-                style={styles.input}
-                editable={!loading}
-              />
+              <TouchableOpacity
+                style={styles.dateButton}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Text style={styles.dateButtonText}>
+                  {formatDate(dateOfBirth)}
+                </Text>
+              </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={dateOfBirth}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={onDateChange}
+                  maximumDate={new Date()}
+                />
+              )}
             </View>
 
+            {/* Gender Field */}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>
                 Gender <Text style={styles.required}>*</Text>
@@ -143,12 +180,14 @@ const ProfileSetup = () => {
               />
             </View>
 
+            {/* Medical Condition Field */}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>
                 Medical Condition <Text style={styles.required}>*</Text>
               </Text>
               <TextInput
                 placeholder="e.g., Diabetes, Hypertension, Cancer"
+                placeholderTextColor="#999"
                 value={condition}
                 onChangeText={(text) => {
                   setError('');
@@ -158,6 +197,14 @@ const ProfileSetup = () => {
                 editable={!loading}
               />
             </View>
+
+            {/* Age Display (Read-only, calculated from DOB) */}
+            {/* <View style={styles.ageDisplayContainer}>
+              <Text style={styles.ageDisplayLabel}>Age:</Text>
+              <Text style={styles.ageDisplayValue}>
+                {calculateAge(dateOfBirth)} years
+              </Text>
+            </View> */}
 
             <TouchableOpacity
               style={[styles.button, loading && styles.buttonDisabled]}
@@ -249,6 +296,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#fff',
     color: Colors.textPrimary,
+  },
+  dateButton: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 12,
+    padding: 14,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+  },
+  dateButtonText: {
+    fontSize: 16,
+    color: Colors.textPrimary,
+  },
+  ageDisplayContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  ageDisplayLabel: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  ageDisplayValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.primary,
   },
   button: {
     backgroundColor: Colors.primary,
