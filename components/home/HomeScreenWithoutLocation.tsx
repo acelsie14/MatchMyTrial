@@ -163,10 +163,13 @@ export default function HomeScreenWithoutLocation({
                     sliderItem={item}
                     index={index}
                     scrollX={scrollX}
+                    onPress={onTrialPress}
                   />
                 )}
                 onScroll={onScrollHandler}
                 scrollEventThrottle={16}
+                contentOffset={{ x: 0, y: 0 }}
+                initialNumToRender={1}
               />
             </View>
           )}

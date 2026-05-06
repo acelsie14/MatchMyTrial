@@ -1,12 +1,11 @@
 import { Colors } from '@/constants/colors';
 import { logout } from '@/services/authServices';
 import { getUserProfile, saveUserProfile } from '@/services/firestoreService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -21,6 +20,11 @@ import {
   View,
 } from 'react-native';
 import ChangePasswordModal from '../../components/ChangePasswordModal';
+import {
+  cacheUserProfile,
+  clearCache,
+  getCachedUserProfile,
+} from '../../services/cacheServices';
 
 export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
@@ -28,6 +32,7 @@ export default function ProfileScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -55,6 +60,20 @@ export default function ProfileScreen() {
       setEmail(user.email || '');
       setOriginalUsername(user.displayName || '');
 
+      const cachedProfile = await getCachedUserProfile();
+      if (cachedProfile) {
+        setAge(cachedProfile.age?.toString() || '');
+        setGender(cachedProfile.gender || '');
+        setCondition(cachedProfile.condition || '');
+
+        setOriginalGender(cachedProfile.gender || '');
+        setOriginalCondition(cachedProfile.condition || '');
+
+        console.log('📦 Profile loaded from cache');
+        fetchAndUpdateProfile(user.uid);
+        return;
+      }
+
       const profile = await getUserProfile(user.uid);
       if (profile) {
         setAge(profile.age?.toString() || '');
@@ -63,11 +82,38 @@ export default function ProfileScreen() {
 
         setOriginalGender(profile.gender || '');
         setOriginalCondition(profile.condition || '');
+
+        await cacheUserProfile({
+          condition: profile.condition,
+          age: profile.age,
+          gender: profile.gender as 'male' | 'female',
+        });
       }
     } catch (error) {
       console.error('Error loading user data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAndUpdateProfile = async (userId: string) => {
+    try {
+      const profile = await getUserProfile(userId);
+      if (profile) {
+        const patientProfile = {
+          condition: profile.condition,
+          age: profile.age,
+          gender: profile.gender as 'male' | 'female',
+        };
+        setAge(profile.age?.toString() || '');
+        setGender(profile.gender || '');
+        setCondition(profile.condition || '');
+
+        await cacheUserProfile(patientProfile);
+        console.log('📦 Profile cache updated from Firestore');
+      }
+    } catch (error) {
+      console.error('Error updating profile from Firestore:', error);
     }
   };
 
@@ -92,10 +138,8 @@ export default function ProfileScreen() {
 
     setSaving(true);
     try {
-      // Update display name in Firebase Auth
       if (username !== originalUsername) {
         await user.updateProfile({ displayName: username });
-        // Update cached user in AsyncStorage
         const { saveUser } = require('@/services/authStorage');
         await saveUser({
           uid: user.uid,
@@ -104,11 +148,17 @@ export default function ProfileScreen() {
         });
       }
 
-      // Update medical info in Firestore
-      await saveUserProfile(user.uid, {
+      const profileData = {
         age: parseInt(age, 10) || 0,
         gender: gender.toLowerCase(),
         condition: condition,
+      };
+
+      await saveUserProfile(user.uid, profileData);
+      await cacheUserProfile({
+        condition: profileData.condition,
+        age: profileData.age,
+        gender: profileData.gender as 'male' | 'female',
       });
 
       setIsEditing(false);
@@ -138,10 +188,8 @@ export default function ProfileScreen() {
               setLoading(true);
               const userId = user.uid;
 
-              // 1. Delete user profile from Firestore
               await firestore().collection('users').doc(userId).delete();
 
-              // 2. Delete saved trials from Firestore
               const savedTrialsSnapshot = await firestore()
                 .collection('savedTrials')
                 .where('userId', '==', userId)
@@ -153,15 +201,12 @@ export default function ProfileScreen() {
               });
               await batch.commit();
 
-              // 3. Clear local storage
               const { removeUser } = require('@/services/authStorage');
               await removeUser();
-              await AsyncStorage.removeItem('cachedUserProfile');
+              await clearCache();
 
-              // 4. Delete the user from Firebase Auth
               await user.delete();
 
-              // 5. Show success alert and navigate
               Alert.alert(
                 'Account Deleted',
                 'Your account has been successfully deleted.',
@@ -315,6 +360,7 @@ export default function ProfileScreen() {
         )}
 
         <ScrollView
+          ref={scrollViewRef}
           contentContainerStyle={[
             styles.scrollContent,
             isEditing && styles.scrollContentEditing,
@@ -322,7 +368,6 @@ export default function ProfileScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Profile Card */}
           <View style={styles.profileCard}>
             <View style={styles.avatarContainer}>
               <Text style={styles.avatarText}>
@@ -333,11 +378,9 @@ export default function ProfileScreen() {
             <Text style={styles.profileEmail}>{email}</Text>
           </View>
 
-          {/* Account Information (Combined) */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Account Information</Text>
             <View style={styles.infoCard}>
-              {/* Username - Editable */}
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
                   <Text style={styles.infoIconText}>👤</Text>
@@ -362,7 +405,6 @@ export default function ProfileScreen() {
 
               <View style={styles.divider} />
 
-              {/* Email - Not Editable */}
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
                   <Text style={styles.infoIconText}>📧</Text>
@@ -375,7 +417,6 @@ export default function ProfileScreen() {
 
               <View style={styles.divider} />
 
-              {/* Age - Display Only, Not Editable */}
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
                   <Text style={styles.infoIconText}>🎂</Text>
@@ -388,7 +429,6 @@ export default function ProfileScreen() {
 
               <View style={styles.divider} />
 
-              {/* Gender - Editable */}
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
                   <Text style={styles.infoIconText}>⚥</Text>
@@ -444,7 +484,6 @@ export default function ProfileScreen() {
 
               <View style={styles.divider} />
 
-              {/* Medical Condition - Editable */}
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
                   <Text style={styles.infoIconText}>🏥</Text>
@@ -469,7 +508,8 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {isEditing && <View style={styles.editModeSpacer} />}
+          {/* Bottom spacer to ensure content clears the keyboard */}
+          <View style={styles.bottomSpacer} />
         </ScrollView>
 
         <ChangePasswordModal
@@ -697,9 +737,6 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   bottomSpacer: {
-    height: 40,
-  },
-  editModeSpacer: {
     height: 100,
   },
 });

@@ -1,6 +1,5 @@
-import { Colors } from '@/constants/colors';
+import LoadingAnimation from '@/components/LoadingAnimation';
 import { getUserProfile } from '@/services/firestoreService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from '@react-native-firebase/auth';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -21,6 +20,15 @@ import {
   fetchTopMatches,
   matchPatientToTrials,
 } from '../../logic/filteringLogic';
+import {
+  cacheAllTrials,
+  cacheTopMatches,
+  cacheUserProfile,
+  getCachedAllTrials,
+  getCachedTopMatches,
+  getCachedUserProfile,
+  updateLastFetchTime,
+} from '../../services/cacheServices';
 
 export default function HomeScreen() {
   const [userProfile, setUserProfile] = useState<PatientProfile | null>(null);
@@ -29,11 +37,14 @@ export default function HomeScreen() {
   const [initialTrials, setInitialTrials] = useState<Study[]>([]);
   const [locationMatches, setLocationMatches] = useState<Study[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingCached, setLoadingCached] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [locationSearch, setLocationSearch] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [hasActiveSearch, setHasActiveSearch] = useState(false);
   const [greeting, setGreeting] = useState('');
+  const [cachedTopMatchesData, setCachedTopMatchesData] = useState<Study[]>([]);
+  const [cachedTrialsData, setCachedTrialsData] = useState<Study[]>([]);
 
   const getTimeBasedGreeting = () => {
     const hour = new Date().getHours();
@@ -42,16 +53,46 @@ export default function HomeScreen() {
     else return 'Good Evening';
   };
 
+  // Load cached data immediately
+  useEffect(() => {
+    const loadCachedData = async () => {
+      setLoadingCached(true);
+      try {
+        // Load cached top matches
+        const cachedTop = await getCachedTopMatches();
+        if (cachedTop && cachedTop.length > 0) {
+          setTopMatches(cachedTop);
+          setCachedTopMatchesData(cachedTop);
+          console.log('📦 Loaded top matches from cache');
+        }
+
+        // Load cached all trials
+        const cachedTrials = await getCachedAllTrials();
+        if (cachedTrials && cachedTrials.length > 0) {
+          setInitialTrials(cachedTrials);
+          setCachedTrialsData(cachedTrials);
+          console.log('📦 Loaded trials from cache');
+        }
+      } catch (error) {
+        console.error('Error loading cached data:', error);
+      } finally {
+        setLoadingCached(false);
+      }
+    };
+
+    loadCachedData();
+  }, []);
+
   useEffect(() => {
     loadUserProfile();
     setGreeting(getTimeBasedGreeting());
   }, []);
 
   useEffect(() => {
-    if (userProfile && !hasActiveSearch) {
+    if (userProfile && !hasActiveSearch && !loadingCached) {
       loadInitialTrials();
     }
-  }, [userProfile]);
+  }, [userProfile, loadingCached]);
 
   const loadUserProfile = async () => {
     try {
@@ -61,20 +102,18 @@ export default function HomeScreen() {
         return;
       }
 
-      const cachedProfile = await AsyncStorage.getItem('cachedUserProfile');
+      // Try cache first
+      const cachedProfile = await getCachedUserProfile();
       if (cachedProfile) {
-        const parsed = JSON.parse(cachedProfile);
-        const patientProfile: PatientProfile = {
-          condition: parsed.condition,
-          age: parsed.age,
-          gender: parsed.gender,
-        };
-        setUserProfile(patientProfile);
+        setUserProfile(cachedProfile);
         setProfileLoading(false);
+        console.log('📦 Profile loaded from cache');
+        // Still fetch from Firestore in background
         fetchAndUpdateProfile(user.uid);
         return;
       }
 
+      // No cache, load from Firestore
       const profile = await getUserProfile(user.uid);
       if (profile) {
         const patientProfile: PatientProfile = {
@@ -83,10 +122,7 @@ export default function HomeScreen() {
           gender: profile.gender,
         };
         setUserProfile(patientProfile);
-        await AsyncStorage.setItem(
-          'cachedUserProfile',
-          JSON.stringify(patientProfile),
-        );
+        await cacheUserProfile(patientProfile);
       }
     } catch (error) {
       console.error('Error loading profile:', error);
@@ -105,10 +141,7 @@ export default function HomeScreen() {
           gender: profile.gender,
         };
         setUserProfile(patientProfile);
-        await AsyncStorage.setItem(
-          'cachedUserProfile',
-          JSON.stringify(patientProfile),
-        );
+        await cacheUserProfile(patientProfile);
       }
     } catch (error) {
       console.error('Error updating profile from Firestore:', error);
@@ -123,9 +156,14 @@ export default function HomeScreen() {
     try {
       const topMatchesData = await fetchTopMatches(userProfile);
       setTopMatches(topMatchesData);
+      setCachedTopMatchesData(topMatchesData);
+      await cacheTopMatches(topMatchesData);
 
       const firstPageTrials = await fetchFirstPageTrials(userProfile);
       setInitialTrials(firstPageTrials);
+      setCachedTrialsData(firstPageTrials);
+      await cacheAllTrials(firstPageTrials);
+      await updateLastFetchTime();
 
       setLocationMatches([]);
     } catch (error) {
@@ -135,8 +173,7 @@ export default function HomeScreen() {
     }
   };
 
-  // Pull-to-refresh handler - RELOADS PROFILE FIRST then trials
-  // ✅ FIXED: Added userProfile to dependency array
+  // Pull-to-refresh handler
   const onRefresh = useCallback(async () => {
     if (!userProfile) return;
 
@@ -144,7 +181,6 @@ export default function HomeScreen() {
     setRefreshing(true);
 
     try {
-      // STEP 1: Reload user profile from Firestore
       const user = auth().currentUser;
       if (user) {
         const freshProfile = await getUserProfile(user.uid);
@@ -155,26 +191,22 @@ export default function HomeScreen() {
             gender: freshProfile.gender as 'male' | 'female',
           };
 
-          // Update the userProfile state
           setUserProfile(updatedProfile);
+          await cacheUserProfile(updatedProfile);
 
-          // Update cache
-          await AsyncStorage.setItem(
-            'cachedUserProfile',
-            JSON.stringify(updatedProfile),
-          );
-
-          // STEP 2: Fetch trials with the UPDATED profile
           const topMatchesData = await fetchTopMatches(updatedProfile);
           const firstPageTrials = await fetchFirstPageTrials(updatedProfile);
 
           setTopMatches(topMatchesData);
-          setInitialTrials(firstPageTrials);
+          setCachedTopMatchesData(topMatchesData);
+          await cacheTopMatches(topMatchesData);
 
-          console.log(
-            '✅ REFRESH COMPLETE - New condition:',
-            freshProfile.condition,
-          );
+          setInitialTrials(firstPageTrials);
+          setCachedTrialsData(firstPageTrials);
+          await cacheAllTrials(firstPageTrials);
+          await updateLastFetchTime();
+
+          console.log('✅ REFRESH COMPLETE');
         }
       }
     } catch (error) {
@@ -182,7 +214,7 @@ export default function HomeScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [userProfile]); // ✅ Added userProfile to dependencies
+  }, [userProfile]);
 
   const loadTrialsWithLocation = async () => {
     if (!userProfile || !locationSearch.trim()) return;
@@ -219,7 +251,10 @@ export default function HomeScreen() {
     setLocationSearch('');
     setHasActiveSearch(false);
     setLocationMatches([]);
-    loadInitialTrials();
+
+    // Restore from cached data WITHOUT making new API calls
+    setTopMatches(cachedTopMatchesData);
+    setInitialTrials(cachedTrialsData);
   };
 
   const handleTrialPress = (trial: Study) => {
@@ -304,7 +339,8 @@ export default function HomeScreen() {
 
       {isSearching && (
         <View style={styles.searchingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          {/* <ActivityIndicator size="large" color={Colors.primary} /> */}
+          <LoadingAnimation />
           <Text style={styles.searchingText}>
             Searching for trials in {locationSearch}...
           </Text>
@@ -371,6 +407,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    marginBottom: 10,
   },
   searchContainer: {
     flex: 1,

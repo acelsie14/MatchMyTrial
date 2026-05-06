@@ -5,7 +5,10 @@ import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -139,7 +142,11 @@ export default function ChangePasswordModal({
       transparent={true}
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
+      <KeyboardAvoidingView
+        style={styles.modalOverlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
+      >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Change Password</Text>
@@ -148,7 +155,12 @@ export default function ChangePasswordModal({
             </TouchableOpacity>
           </View>
 
-          <View style={styles.modalContent}>
+          <ScrollView
+            style={styles.modalScrollView}
+            contentContainerStyle={styles.modalScrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
             {/* Current Password */}
             <Text style={styles.modalLabel}>Current Password</Text>
             <View style={styles.passwordContainer}>
@@ -233,9 +245,12 @@ export default function ChangePasswordModal({
                 <Text style={styles.modalButtonText}>Change Password</Text>
               )}
             </TouchableOpacity>
-          </View>
+
+            {/* Extra bottom padding for safe area */}
+            <View style={styles.bottomSpacer} />
+          </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -251,6 +266,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 20,
     width: '85%',
+    maxHeight: '80%',
     overflow: 'hidden',
   },
   modalHeader: {
@@ -272,9 +288,13 @@ const styles = StyleSheet.create({
     color: '#666',
     fontWeight: '600',
   },
-  modalContent: {
+  modalScrollView: {
+    maxHeight: '100%',
+  },
+  modalScrollContent: {
     paddingHorizontal: 20,
     paddingVertical: 20,
+    paddingBottom: 30,
   },
   modalLabel: {
     fontSize: 14,
@@ -317,5 +337,8 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 16,
+  },
+  bottomSpacer: {
+    height: 20,
   },
 });

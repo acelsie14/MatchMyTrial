@@ -1,6 +1,5 @@
-// components/home/HomeScreenWithLocation.tsx
 import { Colors } from '@/constants/colors';
-import { AntDesign } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import React from 'react';
 import {
   ActivityIndicator,
@@ -106,7 +105,7 @@ export default function HomeScreenWithLocation({
           ))
         ) : (
           <View style={styles.emptyContainer}>
-            <AntDesign name="search" size={48} color="#888" />
+            <Feather name="search" size={48} color="#888" />
             <Text style={styles.emptyTitle}>
               No trials found in {displayLocation}
             </Text>

@@ -1,7 +1,13 @@
 import { Colors } from '@/constants/colors';
 import { Study } from '@/logic/api';
 import React from 'react';
-import { Dimensions, StyleSheet, Text, View } from 'react-native';
+import {
+  Dimensions,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import Animated, {
   Extrapolation,
   SharedValue,
@@ -13,11 +19,12 @@ type Props = {
   sliderItem: Study;
   index: number;
   scrollX: SharedValue<number>;
+  onPress?: (trial: Study) => void; // ← Add onPress prop
 };
 
 const { width } = Dimensions.get('screen');
 
-const SliderItem = ({ sliderItem, index, scrollX }: Props) => {
+const SliderItem = ({ sliderItem, index, scrollX, onPress }: Props) => {
   // Get location info
   const location =
     sliderItem.protocolSection?.contactsLocationsModule?.locations?.[0];
@@ -36,7 +43,6 @@ const SliderItem = ({ sliderItem, index, scrollX }: Props) => {
       (index + 1) * width,
     ];
 
-    // Scale animation
     const scale = interpolate(
       scrollX.value,
       inputRange,
@@ -44,30 +50,38 @@ const SliderItem = ({ sliderItem, index, scrollX }: Props) => {
       Extrapolation.CLAMP,
     );
 
-    // Opacity animation
     const opacity = interpolate(
       scrollX.value,
       inputRange,
-      [0.6, 1, 0.6],
+      [0.9, 1, 0.9],
       Extrapolation.CLAMP,
     );
 
-    // Rotation animation (subtle 3D effect) - use numbers, not strings
     const rotateY = interpolate(
       scrollX.value,
       inputRange,
-      [15, 0, -15], // ← Numbers in degrees, not strings
+      [15, 0, -15],
       Extrapolation.CLAMP,
     );
 
     return {
-      transform: [{ scale }, { rotateY: `${rotateY}deg` }], // ← Convert to string with 'deg'
+      transform: [{ scale }, { rotateY: `${rotateY}deg` }],
       opacity,
     };
   });
 
+  const handlePress = () => {
+    if (onPress) {
+      onPress(sliderItem);
+    }
+  };
+
   return (
-    <View style={styles.itemWrapper}>
+    <TouchableOpacity
+      style={styles.itemWrapper}
+      onPress={handlePress}
+      activeOpacity={0.7}
+    >
       <Animated.View style={[styles.card, animatedStyle]}>
         {/* Status Badge */}
         <View style={styles.statusBadge}>
@@ -99,7 +113,7 @@ const SliderItem = ({ sliderItem, index, scrollX }: Props) => {
         {/* Decorative line */}
         <View style={styles.decorativeLine} />
       </Animated.View>
-    </View>
+    </TouchableOpacity>
   );
 };
 

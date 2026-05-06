@@ -1,3 +1,4 @@
+import LoadingAnimation from '@/components/LoadingAnimation';
 import { Colors } from '@/constants/colors';
 import {
   isBookmarked,
@@ -10,7 +11,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
+  // ActivityIndicator,
   Linking,
   ScrollView,
   StyleSheet,
@@ -375,7 +376,8 @@ export default function TrialDetailsScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        {/* <ActivityIndicator size="large" color={Colors.primary} /> */}
+        <LoadingAnimation />
         <Text style={styles.loadingText}>Loading trial details...</Text>
       </View>
     );

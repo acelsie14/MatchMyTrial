@@ -1,10 +1,10 @@
+import LoadingAnimation from '@/components/LoadingAnimation';
 import { Colors } from '@/constants/colors';
 import { AntDesign } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -98,7 +98,7 @@ export default function AllTrialsScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <LoadingAnimation />
         <Text style={styles.loadingText}>Loading all trials...</Text>
       </View>
     );
@@ -126,9 +126,10 @@ export default function AllTrialsScreen() {
     <View style={styles.container}>
       <StatusBar style="dark" />
 
-      {/* Simplified Header - No back arrow, reduced size */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>All Clinical Trials</Text>
+        <Text style={styles.headerTitle}>
+          All Clinical Trials for {displayCondition}
+        </Text>
       </View>
 
       <ScrollView
@@ -148,12 +149,15 @@ export default function AllTrialsScreen() {
           <>
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>
+                {/* <Text style={styles.sectionTitle}>
                   All Clinical Trials for {displayCondition}
-                </Text>
-                <Text style={styles.sectionSubtitle}>
-                  {trials.length} trials found
-                </Text>
+                </Text> */}
+                {/* Count inside green pill */}
+                <View style={styles.countPill}>
+                  <Text style={styles.countPillText}>
+                    {trials.length} trials found
+                  </Text>
+                </View>
               </View>
 
               {trials.map((trial, index) => (
@@ -192,7 +196,6 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   backButtonText: { color: '#fff', fontWeight: 'bold' },
-  // Simplified header - reduced size, no back arrow
   header: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -202,17 +205,35 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
     backgroundColor: '#fff',
+    marginBottom: 10,
   },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: Colors.primary },
+  headerTitle: { fontSize: 25, fontWeight: '700', color: Colors.primary },
   section: { marginBottom: 28, paddingHorizontal: 16 },
-  sectionHeader: { marginBottom: 16 },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    flexWrap: 'wrap',
+    gap: 10,
+  },
   sectionTitle: {
     fontSize: 22,
     fontWeight: '700',
     color: '#1a1a1a',
-    paddingTop: 10,
+    flex: 1,
   },
-  sectionSubtitle: { fontSize: 14, color: '#888', marginTop: 4 },
+  countPill: {
+    backgroundColor: `${Colors.primary}15`,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  countPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
   verticalCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
