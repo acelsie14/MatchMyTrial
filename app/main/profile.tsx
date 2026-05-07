@@ -213,39 +213,58 @@ export default function ProfileScreen() {
               setLoading(true);
               const userId = user.uid;
 
-              // 1. Delete user profile document from Firestore
+              // Helper function to delete all documents in a subcollection
+              const deleteSubcollection = async (collectionPath: string) => {
+                const snapshot = await firestore()
+                  .collection(collectionPath)
+                  .get();
+                if (snapshot.empty) return;
+
+                const batch = firestore().batch();
+                snapshot.forEach((doc) => {
+                  batch.delete(doc.ref);
+                });
+                await batch.commit();
+                console.log(
+                  `✅ Deleted ${snapshot.size} documents from ${collectionPath}`,
+                );
+              };
+
+              // 1. Delete all documents in the profile subcollection
+              await deleteSubcollection(`users/${userId}/profile`);
+              console.log('✅ Profile subcollection deleted');
+
+              // 2. Delete any other subcollections under users (if they exist)
+              // Add more subcollections here if you have them (e.g., 'notifications', 'activity')
+              await deleteSubcollection(`users/${userId}/notifications`);
+              await deleteSubcollection(`users/${userId}/activity`);
+              await deleteSubcollection(`users/${userId}/settings`);
+
+              // 3. Delete the main user document (THIS REMOVES THE ID/SHELL)
               await firestore().collection('users').doc(userId).delete();
-              console.log('✅ User profile deleted from users collection');
+              console.log(
+                '✅ User document (and ID) completely deleted from users collection',
+              );
 
-              // 2. Delete all bookmarks
-              const bookmarksSnapshot = await firestore()
-                .collection('savedTrials')
-                .doc(userId)
-                .collection('bookmarks')
-                .get();
+              // 4. Delete all bookmarks
+              await deleteSubcollection(`savedTrials/${userId}/bookmarks`);
+              console.log('✅ Bookmarks deleted');
 
-              const bookmarkBatch = firestore().batch();
-              bookmarksSnapshot.forEach((doc) => {
-                bookmarkBatch.delete(doc.ref);
-              });
-              await bookmarkBatch.commit();
-              console.log(`✅ Deleted ${bookmarksSnapshot.size} bookmarks`);
-
-              // 3. Delete user's savedTrials document
+              // 5. Delete user's savedTrials document
               await firestore().collection('savedTrials').doc(userId).delete();
               console.log('✅ User savedTrials document deleted');
 
-              // 4. Clear local storage
+              // 6. Clear local storage
               const { removeUser } = require('@/services/authStorage');
               await removeUser();
               await clearCache();
               console.log('✅ Local cache cleared');
 
-              // 5. Delete user from Firebase Auth
+              // 7. Delete user from Firebase Auth
               await user.delete();
               console.log('✅ Firebase Auth user deleted');
 
-              // 6. Show success alert and navigate
+              // 8. Show success alert and navigate
               Alert.alert(
                 'Account Deleted',
                 'Your account has been successfully deleted. All your data has been removed.',
@@ -420,7 +439,6 @@ export default function ProfileScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Account Information</Text>
             <View style={styles.infoCard}>
-              {/* Rest of your JSX remains the same */}
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
                   <Text style={styles.infoIconText}>👤</Text>
@@ -561,7 +579,6 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  // ... your existing styles remain the same
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa',
