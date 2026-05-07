@@ -1,5 +1,6 @@
+// services/cacheServices.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PatientProfile, Study } from '../logic/api';
+import { Study } from '../logic/api';
 
 // Cache keys
 const CACHE_KEYS = {
@@ -47,17 +48,24 @@ export const clearCache = async (key?: string): Promise<void> => {
   }
 };
 
-// Profile specific functions
-export const cacheUserProfile = async (
-  profile: PatientProfile,
-): Promise<void> => {
+// Profile specific functions (updated to include username)
+export const cacheUserProfile = async (profile: {
+  condition: string;
+  age: number;
+  gender: string;
+  username: string;
+}): Promise<void> => {
   await saveToCache(CACHE_KEYS.USER_PROFILE, profile);
 };
 
-export const getCachedUserProfile =
-  async (): Promise<PatientProfile | null> => {
-    return await loadFromCache<PatientProfile>(CACHE_KEYS.USER_PROFILE);
-  };
+export const getCachedUserProfile = async (): Promise<{
+  condition: string;
+  age: number;
+  gender: string;
+  username: string;
+} | null> => {
+  return await loadFromCache(CACHE_KEYS.USER_PROFILE);
+};
 
 // Saved trials specific functions
 export const cacheSavedTrials = async (trials: any[]): Promise<void> => {

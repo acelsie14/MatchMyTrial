@@ -1,8 +1,14 @@
+// services/firestoreService.ts
 import firestore from '@react-native-firebase/firestore';
 
 export const saveUserProfile = async (
   userId: string,
-  profileData: { age: number; gender: string; condition: string },
+  profileData: {
+    age: number;
+    gender: string;
+    condition: string;
+    username: string;
+  },
 ) => {
   try {
     const profileRef = firestore()
@@ -15,10 +21,11 @@ export const saveUserProfile = async (
       age: profileData.age,
       gender: profileData.gender,
       condition: profileData.condition,
-      completedAt: new Date().toISOString(),
+      username: profileData.username,
+      updatedAt: new Date().toISOString(),
     });
 
-    console.log('profile saved successfully');
+    console.log('Profile saved successfully');
   } catch (error) {
     console.error('Error saving user profile:', error);
     throw error;

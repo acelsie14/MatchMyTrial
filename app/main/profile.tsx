@@ -1,3 +1,4 @@
+// app/main/profile.tsx
 import { Colors } from '@/constants/colors';
 import { logout } from '@/services/authServices';
 import { getUserProfile, saveUserProfile } from '@/services/firestoreService';
@@ -48,6 +49,7 @@ export default function ProfileScreen() {
     loadUserData();
   }, []);
 
+  // This is the loadUserData function - it loads user profile from cache or Firestore
   const loadUserData = async () => {
     try {
       const user = auth().currentUser;
@@ -56,37 +58,52 @@ export default function ProfileScreen() {
         return;
       }
 
+      // Set from Firebase Auth first
       setUsername(user.displayName || '');
       setEmail(user.email || '');
       setOriginalUsername(user.displayName || '');
 
+      // Try to load from cache first
       const cachedProfile = await getCachedUserProfile();
       if (cachedProfile) {
         setAge(cachedProfile.age?.toString() || '');
         setGender(cachedProfile.gender || '');
         setCondition(cachedProfile.condition || '');
+        // Use cached username if Firebase displayName is empty
+        if (!user.displayName && cachedProfile.username) {
+          setUsername(cachedProfile.username);
+          setOriginalUsername(cachedProfile.username);
+        }
 
         setOriginalGender(cachedProfile.gender || '');
         setOriginalCondition(cachedProfile.condition || '');
 
         console.log('📦 Profile loaded from cache');
+        // Refresh in background
         fetchAndUpdateProfile(user.uid);
         return;
       }
 
+      // No cache, load from Firestore
       const profile = await getUserProfile(user.uid);
       if (profile) {
         setAge(profile.age?.toString() || '');
         setGender(profile.gender || '');
         setCondition(profile.condition || '');
+        if (!user.displayName && profile.username) {
+          setUsername(profile.username);
+          setOriginalUsername(profile.username);
+        }
 
         setOriginalGender(profile.gender || '');
         setOriginalCondition(profile.condition || '');
 
+        // Save to cache
         await cacheUserProfile({
           condition: profile.condition,
           age: profile.age,
           gender: profile.gender as 'male' | 'female',
+          username: profile.username || user.displayName || '',
         });
       }
     } catch (error) {
@@ -104,10 +121,15 @@ export default function ProfileScreen() {
           condition: profile.condition,
           age: profile.age,
           gender: profile.gender as 'male' | 'female',
+          username: profile.username || '',
         };
         setAge(profile.age?.toString() || '');
         setGender(profile.gender || '');
         setCondition(profile.condition || '');
+        if (profile.username) {
+          setUsername(profile.username);
+          setOriginalUsername(profile.username);
+        }
 
         await cacheUserProfile(patientProfile);
         console.log('📦 Profile cache updated from Firestore');
@@ -138,6 +160,7 @@ export default function ProfileScreen() {
 
     setSaving(true);
     try {
+      // Update display name in Firebase Auth
       if (username !== originalUsername) {
         await user.updateProfile({ displayName: username });
         const { saveUser } = require('@/services/authStorage');
@@ -152,6 +175,7 @@ export default function ProfileScreen() {
         age: parseInt(age, 10) || 0,
         gender: gender.toLowerCase(),
         condition: condition,
+        username: username,
       };
 
       await saveUserProfile(user.uid, profileData);
@@ -159,6 +183,7 @@ export default function ProfileScreen() {
         condition: profileData.condition,
         age: profileData.age,
         gender: profileData.gender as 'male' | 'female',
+        username: profileData.username,
       });
 
       setIsEditing(false);
@@ -188,43 +213,39 @@ export default function ProfileScreen() {
               setLoading(true);
               const userId = user.uid;
 
-              // 1. Delete user profile document from Firestore (users collection)
+              // 1. Delete user profile document from Firestore
               await firestore().collection('users').doc(userId).delete();
               console.log('✅ User profile deleted from users collection');
 
-              // 2. Delete all bookmarks in the nested structure
-              // First, get all bookmarks in the user's bookmarks subcollection
+              // 2. Delete all bookmarks
               const bookmarksSnapshot = await firestore()
                 .collection('savedTrials')
                 .doc(userId)
                 .collection('bookmarks')
                 .get();
 
-              // Delete each bookmark document
               const bookmarkBatch = firestore().batch();
               bookmarksSnapshot.forEach((doc) => {
                 bookmarkBatch.delete(doc.ref);
               });
               await bookmarkBatch.commit();
-              console.log(
-                `✅ Deleted ${bookmarksSnapshot.size} bookmarks from savedTrials/${userId}/bookmarks`,
-              );
+              console.log(`✅ Deleted ${bookmarksSnapshot.size} bookmarks`);
 
-              // 3. Delete the user's document in savedTrials collection
+              // 3. Delete user's savedTrials document
               await firestore().collection('savedTrials').doc(userId).delete();
               console.log('✅ User savedTrials document deleted');
 
-              // 4. Clear local storage (AsyncStorage)
+              // 4. Clear local storage
               const { removeUser } = require('@/services/authStorage');
               await removeUser();
               await clearCache();
               console.log('✅ Local cache cleared');
 
-              // 5. Delete the user from Firebase Authentication
+              // 5. Delete user from Firebase Auth
               await user.delete();
               console.log('✅ Firebase Auth user deleted');
 
-              // 6. Show success alert and navigate to login
+              // 6. Show success alert and navigate
               Alert.alert(
                 'Account Deleted',
                 'Your account has been successfully deleted. All your data has been removed.',
@@ -399,6 +420,7 @@ export default function ProfileScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Account Information</Text>
             <View style={styles.infoCard}>
+              {/* Rest of your JSX remains the same */}
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
                   <Text style={styles.infoIconText}>👤</Text>
@@ -539,6 +561,7 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  // ... your existing styles remain the same
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa',

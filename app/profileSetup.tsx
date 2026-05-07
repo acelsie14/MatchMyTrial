@@ -66,6 +66,14 @@ const ProfileSetup = () => {
       setError('Please enter your medical condition');
       return false;
     }
+
+    // Check if user has username from signup
+    const user = auth().currentUser;
+    if (!user?.displayName) {
+      setError('Username not found. Please log out and log back in.');
+      return false;
+    }
+
     return true;
   };
 
@@ -85,23 +93,40 @@ const ProfileSetup = () => {
         return;
       }
 
+      // Get username from Firebase Auth displayName (set during signup)
+      const username = user.displayName || '';
+
+      if (!username) {
+        setError('Username not found. Please log out and log back in.');
+        setLoading(false);
+        return;
+      }
+
       const age = calculateAge(dateOfBirth);
+
+      // Profile data for Firestore (no dateOfBirth needed here if not in schema)
       const profileData = {
         age: age,
-        dateOfBirth: dateOfBirth.toISOString(),
         gender: gender.toLowerCase(),
         condition: condition,
+        username: username, // ✅ Now always has a value from signup
       };
 
       await saveUserProfile(user.uid, profileData);
+
+      // Cache the profile data including dateOfBirth for local use
       await AsyncStorage.setItem(
         'cachedUserProfile',
-        JSON.stringify(profileData),
+        JSON.stringify({
+          ...profileData,
+          dateOfBirth: dateOfBirth.toISOString(),
+        }),
       );
 
       router.replace('/');
-    } catch (err) {
-      setError('Failed to save profile. Please try again.');
+    } catch (err: any) {
+      console.error('Save error:', err);
+      setError(err.message || 'Failed to save profile. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -197,14 +222,6 @@ const ProfileSetup = () => {
                 editable={!loading}
               />
             </View>
-
-            {/* Age Display (Read-only, calculated from DOB) */}
-            {/* <View style={styles.ageDisplayContainer}>
-              <Text style={styles.ageDisplayLabel}>Age:</Text>
-              <Text style={styles.ageDisplayValue}>
-                {calculateAge(dateOfBirth)} years
-              </Text>
-            </View> */}
 
             <TouchableOpacity
               style={[styles.button, loading && styles.buttonDisabled]}
@@ -308,23 +325,6 @@ const styles = StyleSheet.create({
   dateButtonText: {
     fontSize: 16,
     color: Colors.textPrimary,
-  },
-  ageDisplayContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 16,
-    paddingHorizontal: 4,
-  },
-  ageDisplayLabel: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
-  ageDisplayValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.primary,
   },
   button: {
     backgroundColor: Colors.primary,
