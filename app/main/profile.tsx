@@ -188,28 +188,46 @@ export default function ProfileScreen() {
               setLoading(true);
               const userId = user.uid;
 
+              // 1. Delete user profile document from Firestore (users collection)
               await firestore().collection('users').doc(userId).delete();
+              console.log('✅ User profile deleted from users collection');
 
-              const savedTrialsSnapshot = await firestore()
+              // 2. Delete all bookmarks in the nested structure
+              // First, get all bookmarks in the user's bookmarks subcollection
+              const bookmarksSnapshot = await firestore()
                 .collection('savedTrials')
-                .where('userId', '==', userId)
+                .doc(userId)
+                .collection('bookmarks')
                 .get();
 
-              const batch = firestore().batch();
-              savedTrialsSnapshot.forEach((doc) => {
-                batch.delete(doc.ref);
+              // Delete each bookmark document
+              const bookmarkBatch = firestore().batch();
+              bookmarksSnapshot.forEach((doc) => {
+                bookmarkBatch.delete(doc.ref);
               });
-              await batch.commit();
+              await bookmarkBatch.commit();
+              console.log(
+                `✅ Deleted ${bookmarksSnapshot.size} bookmarks from savedTrials/${userId}/bookmarks`,
+              );
 
+              // 3. Delete the user's document in savedTrials collection
+              await firestore().collection('savedTrials').doc(userId).delete();
+              console.log('✅ User savedTrials document deleted');
+
+              // 4. Clear local storage (AsyncStorage)
               const { removeUser } = require('@/services/authStorage');
               await removeUser();
               await clearCache();
+              console.log('✅ Local cache cleared');
 
+              // 5. Delete the user from Firebase Authentication
               await user.delete();
+              console.log('✅ Firebase Auth user deleted');
 
+              // 6. Show success alert and navigate to login
               Alert.alert(
                 'Account Deleted',
-                'Your account has been successfully deleted.',
+                'Your account has been successfully deleted. All your data has been removed.',
                 [{ text: 'OK', onPress: () => router.replace('/auth/login') }],
               );
             } catch (error: any) {
@@ -508,7 +526,6 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Bottom spacer to ensure content clears the keyboard */}
           <View style={styles.bottomSpacer} />
         </ScrollView>
 
