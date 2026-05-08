@@ -64,3 +64,30 @@ export const hasCompletedProfile = async (userId: string) => {
     return false;
   }
 };
+
+// Delete all user profile data from Firestore
+export const deleteUserProfileData = async (userId: string): Promise<void> => {
+  try {
+    // Delete all documents in the profile subcollection
+    const profileSnapshot = await firestore()
+      .collection('users')
+      .doc(userId)
+      .collection('profile')
+      .get();
+
+    const batch = firestore().batch();
+
+    profileSnapshot.forEach((doc) => {
+      batch.delete(doc.ref);
+    });
+
+    // Delete the main user document (removes the ID/shell)
+    batch.delete(firestore().collection('users').doc(userId));
+
+    await batch.commit();
+    console.log('✅ User profile data completely deleted');
+  } catch (error) {
+    console.error('Error deleting user profile:', error);
+    throw error;
+  }
+};

@@ -1,9 +1,13 @@
 // app/main/profile.tsx
 import { Colors } from '@/constants/colors';
-import { logout } from '@/services/authServices';
-import { getUserProfile, saveUserProfile } from '@/services/firestoreService';
+import { logout, reauthenticateUser } from '@/services/authServices';
+import { deleteAllUserBookmarks } from '@/services/bookmarkService';
+import {
+  deleteUserProfileData,
+  getUserProfile,
+  saveUserProfile,
+} from '@/services/firestoreService';
 import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
@@ -21,6 +25,7 @@ import {
   View,
 } from 'react-native';
 import ChangePasswordModal from '../../components/ChangePasswordModal';
+import ReauthModal from '../../components/ReauthModal';
 import {
   cacheUserProfile,
   clearCache,
@@ -33,6 +38,7 @@ export default function ProfileScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showReauthModal, setShowReauthModal] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
   const [username, setUsername] = useState('');
@@ -41,6 +47,7 @@ export default function ProfileScreen() {
   const [gender, setGender] = useState('');
   const [condition, setCondition] = useState('');
 
+  // stores the original values before editing
   const [originalUsername, setOriginalUsername] = useState('');
   const [originalGender, setOriginalGender] = useState('');
   const [originalCondition, setOriginalCondition] = useState('');
@@ -49,9 +56,9 @@ export default function ProfileScreen() {
     loadUserData();
   }, []);
 
-  // This is the loadUserData function - it loads user profile from cache or Firestore
   const loadUserData = async () => {
     try {
+      //check if user exists
       const user = auth().currentUser;
       if (!user) {
         router.replace('/auth/login');
@@ -196,10 +203,34 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleDeleteAccount = async () => {
+  const confirmDeleteAccount = async (password: string) => {
     const user = auth().currentUser;
-    if (!user) return;
+    if (!user) throw new Error('No user found');
 
+    // Re-authenticate first
+    await reauthenticateUser(password);
+
+    // Then proceed with deletion
+    const userId = user.uid;
+
+    // 1. Delete profile data from Firestore
+    await deleteUserProfileData(userId);
+
+    // 2. Delete all bookmarks
+    await deleteAllUserBookmarks(userId);
+
+    // 3. Clear local storage
+    const { removeUser } = require('@/services/authStorage');
+    await removeUser();
+    await clearCache();
+    console.log('✅ Local cache cleared');
+
+    // 4. Delete user from Firebase Auth
+    await user.delete();
+    console.log('✅ Firebase Auth user deleted');
+  };
+
+  const handleDeleteAccount = () => {
     Alert.alert(
       'Delete Account',
       'Are you sure you want to delete your account? This action is permanent and cannot be undone. All your data will be permanently removed.',
@@ -208,98 +239,8 @@ export default function ProfileScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              setLoading(true);
-              const userId = user.uid;
-
-              // Helper function to delete all documents in a subcollection
-              const deleteSubcollection = async (collectionPath: string) => {
-                const snapshot = await firestore()
-                  .collection(collectionPath)
-                  .get();
-                if (snapshot.empty) return;
-
-                const batch = firestore().batch();
-                snapshot.forEach((doc) => {
-                  batch.delete(doc.ref);
-                });
-                await batch.commit();
-                console.log(
-                  `✅ Deleted ${snapshot.size} documents from ${collectionPath}`,
-                );
-              };
-
-              // 1. Delete all documents in the profile subcollection
-              await deleteSubcollection(`users/${userId}/profile`);
-              console.log('✅ Profile subcollection deleted');
-
-              // 2. Delete any other subcollections under users (if they exist)
-              // Add more subcollections here if you have them (e.g., 'notifications', 'activity')
-              await deleteSubcollection(`users/${userId}/notifications`);
-              await deleteSubcollection(`users/${userId}/activity`);
-              await deleteSubcollection(`users/${userId}/settings`);
-
-              // 3. Delete the main user document (THIS REMOVES THE ID/SHELL)
-              await firestore().collection('users').doc(userId).delete();
-              console.log(
-                '✅ User document (and ID) completely deleted from users collection',
-              );
-
-              // 4. Delete all bookmarks
-              await deleteSubcollection(`savedTrials/${userId}/bookmarks`);
-              console.log('✅ Bookmarks deleted');
-
-              // 5. Delete user's savedTrials document
-              await firestore().collection('savedTrials').doc(userId).delete();
-              console.log('✅ User savedTrials document deleted');
-
-              // 6. Clear local storage
-              const { removeUser } = require('@/services/authStorage');
-              await removeUser();
-              await clearCache();
-              console.log('✅ Local cache cleared');
-
-              // 7. Delete user from Firebase Auth
-              await user.delete();
-              console.log('✅ Firebase Auth user deleted');
-
-              // 8. Show success alert and navigate
-              Alert.alert(
-                'Account Deleted',
-                'Your account has been successfully deleted. All your data has been removed.',
-                [{ text: 'OK', onPress: () => router.replace('/auth/login') }],
-              );
-            } catch (error: any) {
-              console.error('Error deleting account:', error);
-              setLoading(false);
-
-              if (error.code === 'auth/requires-recent-login') {
-                Alert.alert(
-                  'Authentication Required',
-                  'For security reasons, please log out and log back in before deleting your account.',
-                  [
-                    {
-                      text: 'OK',
-                      onPress: async () => {
-                        await logout();
-                        router.replace('/auth/login');
-                      },
-                    },
-                  ],
-                );
-              } else if (error.code === 'auth/network-request-failed') {
-                Alert.alert(
-                  'Network Error',
-                  'Please check your internet connection and try again.',
-                );
-              } else {
-                Alert.alert(
-                  'Error',
-                  `Failed to delete account: ${error.message || 'Please try again.'}`,
-                );
-              }
-            }
+          onPress: () => {
+            setShowReauthModal(true);
           },
         },
       ],
@@ -572,6 +513,20 @@ export default function ProfileScreen() {
         <ChangePasswordModal
           visible={showPasswordModal}
           onClose={() => setShowPasswordModal(false)}
+        />
+
+        <ReauthModal
+          visible={showReauthModal}
+          onClose={() => setShowReauthModal(false)}
+          onConfirm={async (password: string) => {
+            await confirmDeleteAccount(password);
+            setShowReauthModal(false);
+            Alert.alert(
+              'Account Deleted',
+              'Your account has been successfully deleted. All your data has been removed.',
+              [{ text: 'OK', onPress: () => router.replace('/auth/login') }],
+            );
+          }}
         />
       </KeyboardAvoidingView>
     </TouchableWithoutFeedback>

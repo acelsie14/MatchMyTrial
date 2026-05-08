@@ -1,3 +1,4 @@
+// services/bookmarkService.ts
 import firestore from '@react-native-firebase/firestore';
 
 export const saveBookmark = async (
@@ -5,19 +6,12 @@ export const saveBookmark = async (
   trial: any,
 ): Promise<void> => {
   try {
-    // Step 1: Extract trialId (NCT number)
     const trialId = trial?.protocolSection?.identificationModule?.nctId;
-
-    // Step 2: Extract title
     const title =
       trial?.protocolSection?.identificationModule?.briefTitle ||
       'Untitled Trial';
-
-    // Step 3: Extract status
     const status =
       trial?.protocolSection?.statusModule?.overallStatus || 'Unknown';
-
-    // Step 4: Extract location (city and country)
     const location =
       trial?.protocolSection?.contactsLocationsModule?.locations?.[0];
     const city = location?.city || '';
@@ -27,7 +21,6 @@ export const saveBookmark = async (
         ? `${city}, ${country}`
         : city || country || 'Location not specified';
 
-    // Step 5: Save to Firestore at path: savedTrials/{userId}/bookmarks/{trialId}
     await firestore()
       .collection('savedTrials')
       .doc(userId)
@@ -53,7 +46,6 @@ export const removeBookmark = async (
   trialId: string,
 ): Promise<void> => {
   try {
-    // Delete from path: savedTrials/{userId}/bookmarks/{trialId}
     await firestore()
       .collection('savedTrials')
       .doc(userId)
@@ -70,7 +62,6 @@ export const removeBookmark = async (
 
 export const getUserBookmarks = async (userId: string): Promise<any[]> => {
   try {
-    // Get all documents from savedTrials/{userId}/bookmarks
     const snapshot = await firestore()
       .collection('savedTrials')
       .doc(userId)
@@ -109,5 +100,32 @@ export const isBookmarked = async (
   } catch (error) {
     console.error('Error checking bookmark status:', error);
     return false;
+  }
+};
+
+// Delete all bookmarks for a user
+export const deleteAllUserBookmarks = async (userId: string): Promise<void> => {
+  try {
+    // Get all bookmarks for this user
+    const bookmarksSnapshot = await firestore()
+      .collection('savedTrials')
+      .doc(userId)
+      .collection('bookmarks')
+      .get();
+
+    const batch = firestore().batch();
+
+    bookmarksSnapshot.forEach((doc) => {
+      batch.delete(doc.ref);
+    });
+
+    // Delete the parent savedTrials document
+    batch.delete(firestore().collection('savedTrials').doc(userId));
+
+    await batch.commit();
+    console.log(`✅ Deleted ${bookmarksSnapshot.size} bookmarks`);
+  } catch (error) {
+    console.error('Error deleting bookmarks:', error);
+    throw error;
   }
 };
