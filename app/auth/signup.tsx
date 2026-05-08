@@ -1,5 +1,7 @@
+// app/auth/signup.tsx
 import { Colors } from '@/constants/colors';
 import { saveUser } from '@/services/authStorage';
+import { wasEmailVerifiedBefore } from '@/services/firestoreService';
 import { AntDesign } from '@expo/vector-icons';
 import auth from '@react-native-firebase/auth';
 import { useRouter } from 'expo-router';
@@ -71,6 +73,10 @@ const Signup = () => {
     setError('');
 
     try {
+      // Check if this email was ever verified before (in a previous account)
+      const wasVerifiedBefore = await wasEmailVerifiedBefore(email);
+
+      // Create the account
       const userCredential = await auth().createUserWithEmailAndPassword(
         email,
         password,
@@ -81,21 +87,44 @@ const Signup = () => {
         displayName: username,
       });
 
-      // ✅ Send verification email
-      await user.sendEmailVerification();
+      if (wasVerifiedBefore) {
+        // This email was verified in a previous account
+        // No need to send verification email - they can go straight to profile setup
+        await saveUser({
+          uid: user.uid,
+          email: user.email || '',
+          username: username,
+        });
 
-      await saveUser({
-        uid: user.uid,
-        email: user.email || '',
-        username: username,
-      });
+        Alert.alert(
+          'Welcome Back! 🎉',
+          'Your email was already verified. You can now complete your profile and start using the app.',
+          [
+            {
+              text: 'Continue',
+              onPress: () => router.replace('/profileSetup'),
+            },
+          ],
+        );
+      } else {
+        // Brand new user - send verification email
+        await user.sendEmailVerification();
 
-      // ✅ Redirect to login with a message to verify email
-      Alert.alert(
-        'Verification Email Sent',
-        'Please check your inbox and verify your email address before logging in.',
-        [{ text: 'OK', onPress: () => router.replace('/auth/login') }],
-      );
+        await saveUser({
+          uid: user.uid,
+          email: user.email || '',
+          username: username,
+        });
+
+        // Sign out so they can verify email
+        await auth().signOut();
+
+        Alert.alert(
+          'Verification Email Sent',
+          'Please check your inbox and verify your email address before logging in.',
+          [{ text: 'OK', onPress: () => router.replace('/auth/login') }],
+        );
+      }
     } catch (error: any) {
       const errorCode = error.code;
 

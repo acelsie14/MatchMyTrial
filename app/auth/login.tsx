@@ -1,5 +1,7 @@
+// app/auth/login.tsx
 import { Colors } from '@/constants/colors';
 import { saveUser } from '@/services/authStorage';
+import { addVerifiedEmail } from '@/services/firestoreService';
 import { AntDesign } from '@expo/vector-icons';
 import auth from '@react-native-firebase/auth';
 import { useRouter } from 'expo-router';
@@ -57,6 +59,11 @@ const Login = () => {
         );
         setLoading(false);
         return;
+      }
+
+      // ✅ NEW: Store this email in verifiedEmails collection (for future returning users)
+      if (user.email && user.emailVerified) {
+        await addVerifiedEmail(user.email);
       }
 
       // Save user data

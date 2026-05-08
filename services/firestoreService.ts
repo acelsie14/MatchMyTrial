@@ -86,8 +86,49 @@ export const deleteUserProfileData = async (userId: string): Promise<void> => {
 
     await batch.commit();
     console.log('✅ User profile data completely deleted');
+
+    // ⚠️ DO NOT delete the verifiedEmails record - keep it for future signups!
   } catch (error) {
     console.error('Error deleting user profile:', error);
     throw error;
+  }
+};
+
+// Check if email was ever verified
+export const wasEmailVerifiedBefore = async (
+  email: string,
+): Promise<boolean> => {
+  try {
+    const doc = await firestore()
+      .collection('verifiedEmails')
+      .doc(email.toLowerCase())
+      .get();
+
+    return doc.exists();
+  } catch (error) {
+    console.error('Error checking verified email:', error);
+    return false;
+  }
+};
+
+//  Add email to verified emails collection
+export const addVerifiedEmail = async (email: string): Promise<void> => {
+  try {
+    const emailLower = email.toLowerCase();
+    const doc = await firestore()
+      .collection('verifiedEmails')
+      .doc(emailLower)
+      .get();
+
+    if (!doc.exists) {
+      await firestore().collection('verifiedEmails').doc(emailLower).set({
+        email: emailLower,
+        verifiedAt: new Date().toISOString(),
+        source: 'login_verification',
+      });
+      console.log('✅ Email added to verifiedEmails collection:', emailLower);
+    }
+  } catch (error) {
+    console.error('Error adding verified email:', error);
   }
 };
